@@ -101,11 +101,22 @@
 
 <main class="app-shell" id="appShell">
 
-  <section class="empty-state" id="emptyState">
-    <div class="empty-glyph">◐</div>
-    <h1>Search a clan or a league to get started</h1>
-    <p>Live rosters, points/hour trends, and gaps to your leaderboard neighbors — pulled straight from the public BIG Games API.</p>
-    <div class="empty-suggest" id="emptySuggest"></div>
+  <section class="browse-state" id="browseState">
+    <div class="browse-head">
+      <div>
+        <h1 id="browseTitle">Top clans</h1>
+        <p>Browse the tracked leaderboard, or search any clan/league by name above.</p>
+      </div>
+      <div class="browse-meta">
+        <span id="browseTotal"></span>
+      </div>
+    </div>
+    <div class="browse-grid" id="browseGrid">
+      <div class="browse-card skeleton" aria-hidden="true"></div>
+      <div class="browse-card skeleton" aria-hidden="true"></div>
+      <div class="browse-card skeleton" aria-hidden="true"></div>
+      <div class="browse-card skeleton" aria-hidden="true"></div>
+    </div>
   </section>
 
   <section class="dashboard" id="dashboard" hidden>
@@ -115,9 +126,12 @@
       <span id="loadingText">Loading…</span>
     </div>
 
+    <button type="button" class="back-btn" id="backBtn">← Back to top 100</button>
+
     <div class="hero-card" id="heroCard">
       <div class="hero-icon-wrap">
         <img id="heroIcon" class="hero-icon skeleton" alt="" width="72" height="72">
+        <div class="hero-icon-fallback" id="heroIconFallback" hidden></div>
       </div>
       <div class="hero-info">
         <div class="hero-title-row">
@@ -129,44 +143,73 @@
       <div class="hero-stats" id="heroStats"></div>
     </div>
 
-    <div class="grid-2col">
-      <div class="col-main">
+    <nav class="tabbar" id="tabbar" role="tablist">
+      <button type="button" class="tab-btn is-active" data-tab="overview" role="tab" aria-selected="true">Overview</button>
+      <button type="button" class="tab-btn" data-tab="members" role="tab" aria-selected="false">Members</button>
+      <button type="button" class="tab-btn" data-tab="battle" role="tab" aria-selected="false">Current Battle</button>
+      <span class="tab-indicator" id="tabIndicator"></span>
+    </nav>
 
-        <div class="panel" id="chartPanel">
-          <div class="panel-head">
-            <h2>Points / hour</h2>
-            <span class="panel-sub" id="chartSourceNote">—</span>
+    <div class="tab-panel" id="tabOverview">
+      <div class="grid-2col">
+        <div class="col-main">
+
+          <div class="panel" id="chartPanel">
+            <div class="panel-head">
+              <h2>Points / hour</h2>
+              <span class="panel-sub" id="chartSourceNote">—</span>
+            </div>
+            <div class="chip-row" id="chartChips"></div>
+            <div class="chart-wrap">
+              <canvas id="pointsChart" height="220"></canvas>
+            </div>
           </div>
-          <div class="chip-row" id="chartChips"></div>
-          <div class="chart-wrap">
-            <canvas id="pointsChart" height="220"></canvas>
+
+          <div class="panel" id="rankUpPanel">
+            <div class="panel-head">
+              <h2>Points to rank up</h2>
+              <span class="panel-sub">from the tracked leaderboard</span>
+            </div>
+            <div class="rankup-grid" id="rankUpGrid"></div>
           </div>
+
         </div>
 
-        <div class="panel" id="rosterPanel">
-          <div class="panel-head">
-            <h2>Roster</h2>
-            <span class="panel-sub" id="rosterCount">—</span>
-          </div>
-          <div class="table-wrap">
-            <table class="roster-table" id="rosterTable">
-              <thead>
-                <tr id="rosterHead"></tr>
-              </thead>
-              <tbody id="rosterBody"></tbody>
-            </table>
+        <div class="col-side">
+          <div class="panel" id="gapPanel">
+            <div class="panel-head">
+              <h2>Gap to neighbors</h2>
+            </div>
+            <div class="gap-cards" id="gapCards"></div>
           </div>
         </div>
-
       </div>
+    </div>
 
-      <div class="col-side">
-        <div class="panel" id="gapPanel">
-          <div class="panel-head">
-            <h2>Gap to neighbors</h2>
-          </div>
-          <div class="gap-cards" id="gapCards"></div>
+    <div class="tab-panel" id="tabMembers" hidden>
+      <div class="panel" id="rosterPanel">
+        <div class="panel-head">
+          <h2>Roster</h2>
+          <span class="panel-sub" id="rosterCount">—</span>
         </div>
+        <div class="table-wrap">
+          <table class="roster-table" id="rosterTable">
+            <thead>
+              <tr id="rosterHead"></tr>
+            </thead>
+            <tbody id="rosterBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="tab-panel" id="tabBattle" hidden>
+      <div class="panel" id="battlePanel">
+        <div class="panel-head">
+          <h2 id="battleTitle">Current battle</h2>
+          <span class="panel-sub" id="battleSub">—</span>
+        </div>
+        <div id="battleBody"></div>
       </div>
     </div>
 

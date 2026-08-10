@@ -59,6 +59,47 @@ const PS99Api = (() => {
     }
   }
 
+  // The latest clan battle, active or not. This is a GLOBAL object (not
+  // filtered by clan) confirmed to exist at /api/activeClanBattle, but its
+  // internal shape isn't in the public docs — callers should treat it
+  // defensively (see PS99Api.pick / dynamicFields below).
+  let battleCache = null;
+  async function getActiveClanBattle() {
+    if (battleCache) return battleCache;
+    try {
+      battleCache = await getJSON(`${LEGACY}/activeClanBattle`);
+      return battleCache;
+    } catch {
+      return null;
+    }
+  }
+
+  // Returns the first defined value among a list of candidate field names.
+  // Used anywhere the API's exact per-member field naming isn't documented
+  // publicly — safer than hardcoding a guess that might just be wrong.
+  function pick(obj, keys) {
+    if (!obj) return undefined;
+    for (const k of keys) if (obj[k] !== undefined && obj[k] !== null) return obj[k];
+    return undefined;
+  }
+
+  // Any extra numeric fields on an object beyond a known/ignored set —
+  // lets the UI surface real data (donations, contribution points, etc.)
+  // under whatever field name the API actually uses, instead of us
+  // guessing a name that might not match.
+  function extraNumericFields(obj, ignoreKeys) {
+    const out = {};
+    for (const [k, v] of Object.entries(obj || {})) {
+      if (ignoreKeys.has(k)) continue;
+      if (typeof v === "number") out[k] = v;
+    }
+    return out;
+  }
+
+  function prettyKey(k) {
+    return k.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/^./, (c) => c.toUpperCase());
+  }
+
   async function resolveUsernames(uids) {
     const unique = [...new Set(uids.filter((u) => u != null))];
     const result = new Map();
@@ -156,5 +197,8 @@ const PS99Api = (() => {
     }
   }
 
-  return { getClan, getLeague, getClanPlayerSample, resolveUsernames, findLeaderboardRank, getAtRank, iconUrl, assetIdOf };
+  return {
+    getClan, getLeague, getClanPlayerSample, resolveUsernames, findLeaderboardRank, getAtRank,
+    getActiveClanBattle, pick, extraNumericFields, prettyKey, iconUrl, assetIdOf,
+  };
 })();
