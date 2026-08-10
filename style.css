@@ -309,6 +309,25 @@ input[type="range"]{ width:100%; accent-color: var(--lime); }
 .battle-empty{ color: var(--text-faint); font-size: 13.5px; padding: 16px 0; }
 .battle-stat-row{ display:flex; gap:12px; flex-wrap:wrap; margin: 10px 0 18px; }
 
+.form-row{ display:flex; gap:10px; flex-wrap:wrap; padding-bottom: 16px; }
+.form-card{
+  display:flex; align-items:center; gap:10px; background: var(--bg-elevated-2);
+  border:1px solid var(--border); border-radius: var(--radius-sm); padding: 9px 14px 9px 9px;
+  flex: 1 1 200px; min-width: 200px;
+}
+.form-avatar{
+  width:36px; height:36px; border-radius:50%; object-fit:cover; flex-shrink:0;
+  background: var(--bg-elevated); border: 1px solid var(--border);
+}
+.form-avatar-fallback{
+  width:36px; height:36px; border-radius:50%; flex-shrink:0; background: var(--bg-elevated);
+  border: 1px solid var(--border); display:flex; align-items:center; justify-content:center;
+  font-family: var(--font-display); font-weight:700; font-size:12px; color: var(--text-faint);
+}
+.form-name{ font-family: var(--font-body); font-weight:600; font-size: 13.5px; }
+.form-gain{ font-family: var(--font-mono); font-size: 12px; color: var(--lime); font-weight:600; }
+.form-empty{ color: var(--text-faint); font-size: 13px; padding: 8px 0 16px; }
+
 .dashboard{ position: relative; animation: fadein .35s ease; }
 @keyframes fadein{ from{ opacity:0; transform: translateY(6px);} to{ opacity:1; transform:none; } }
 
@@ -319,6 +338,7 @@ input[type="range"]{ width:100%; accent-color: var(--lime); }
   border-radius: var(--radius-lg);
   color: var(--text-dim); font-size: 13px;
 }
+@keyframes spin{ to{ transform: rotate(360deg); } }
 .spinner{
   width: 30px; height:30px; border-radius:50%;
   border: 3px solid var(--border); border-top-color: var(--lime);

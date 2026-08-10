@@ -197,8 +197,30 @@ const PS99Api = (() => {
     }
   }
 
+  const avatarCache = new Map(); // uid -> image url
+  async function getAvatarHeadshots(uids) {
+    const unique = [...new Set(uids.filter((u) => u != null))];
+    const result = new Map();
+    const uncached = [];
+    unique.forEach((u) => {
+      if (avatarCache.has(u)) result.set(u, avatarCache.get(u));
+      else uncached.push(u);
+    });
+    if (uncached.length) {
+      try {
+        const url = `https://thumbnails.roblox.com/v1/users/avatar-headshot?userIds=${uncached.join(",")}&size=48x48&format=png&isCircular=true`;
+        const res = await fetch(url);
+        const body = await res.json();
+        (body.data || []).forEach((item) => {
+          if (item.imageUrl) { result.set(item.targetId, item.imageUrl); avatarCache.set(item.targetId, item.imageUrl); }
+        });
+      } catch { /* avatars are decorative; roster still works without them */ }
+    }
+    return result;
+  }
+
   return {
     getClan, getLeague, getClanPlayerSample, resolveUsernames, findLeaderboardRank, getAtRank,
-    getActiveClanBattle, pick, extraNumericFields, prettyKey, iconUrl, assetIdOf,
+    getActiveClanBattle, getAvatarHeadshots, pick, extraNumericFields, prettyKey, iconUrl, assetIdOf,
   };
 })();

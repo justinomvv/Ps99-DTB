@@ -4,7 +4,7 @@
 (() => {
   "use strict";
 
-  // ---------- tiny formatters (mirrors the desktop app's fmt_num/fmt_date) ----------
+  // ---------- tiny formatters ----------
   function fmtNum(n) {
     if (n === null || n === undefined || Number.isNaN(n)) return "-";
     const sign = n < 0 ? "-" : "";
@@ -17,7 +17,7 @@
   }
   function fmtDate(ts) {
     if (!ts) return "-";
-    const d = new Date(ts * (ts < 2e10 ? 1000 : 1)); // handle sec or ms epoch
+    const d = new Date(ts * (ts < 2e10 ? 1000 : 1));
     return d.toISOString().slice(0, 10);
   }
   function flagEmoji(code) {
@@ -25,24 +25,22 @@
     const off = 127397;
     return [...code.toUpperCase()].map((c) => String.fromCodePoint(c.charCodeAt(0) + off)).join("");
   }
-  function initials(name) {
-    return (name || "?").replace(/[\[\]]/g, "").slice(0, 2).toUpperCase();
+  function ordinal(n) {
+    const s = ["th", "st", "nd", "rd"], v = n % 100;
+    return n + (s[(v - 20) % 10] || s[v] || s[0]);
   }
+  function escapeHtml(s) { return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
 
   // ---------- state ----------
   const state = {
-    mode: "clan",
-    name: null,
-    entity: null,
-    kind: null,
-    memberSample: new Map(),
-    resolvedNames: new Map(),
-    rank: null,
-    rankTotal: null,
-    rankSource: null, // "tracked" | "live" | null
-    neighborAbove: null,
-    neighborBelow: null,
-    prevPoints: new Map(), // uid -> {ts, points}
+    view: "browse",        // "browse" | "detail"
+    mode: "clan",           // clan/league toggle, applies to both browse + search
+    activeTab: "overview",
+    name: null, entity: null, kind: null,
+    memberSample: new Map(), resolvedNames: new Map(),
+    rank: null, rankTotal: null, rankSource: null,
+    neighborAbove: null, neighborBelow: null,
+    prevPoints: new Map(),
     gen: 0,
     settings: {
       colCreated: true, colCountry: true, colPoints: true, colGems: true, colJoined: false,
@@ -50,12 +48,9 @@
     },
     sort: { key: "points", dir: "desc" },
     leaderboards: { clan: null, league: null },
-    refreshDeadline: 0,
-    refreshTimer: null,
-    countdownTimer: null,
+    refreshDeadline: 0, refreshTimer: null, countdownTimer: null,
   };
 
-  // ---------- DOM refs ----------
   const $ = (id) => document.getElementById(id);
   const el = {
     scanBar: $("scanBar"),
@@ -64,13 +59,17 @@
     settingsBtn: $("settingsBtn"), settingsDrawer: $("settingsDrawer"), drawerScrim: $("drawerScrim"),
     soundBtn: $("soundBtn"), soundOn: $("soundIconOn"), soundOff: $("soundIconOff"),
     ringFg: $("ringFg"),
-    emptyState: $("emptyState"), emptySuggest: $("emptySuggest"),
-    dashboard: $("dashboard"), loadingOverlay: $("loadingOverlay"), loadingText: $("loadingText"),
-    heroIcon: $("heroIcon"), heroName: $("heroName"), rankBadge: $("rankBadge"),
+    browseState: $("browseState"), browseGrid: $("browseGrid"), browseTitle: $("browseTitle"), browseTotal: $("browseTotal"),
+    dashboard: $("dashboard"), loadingOverlay: $("loadingOverlay"), loadingText: $("loadingText"), backBtn: $("backBtn"),
+    heroIcon: $("heroIcon"), heroIconFallback: $("heroIconFallback"), heroName: $("heroName"), rankBadge: $("rankBadge"),
     heroMeta: $("heroMeta"), heroStats: $("heroStats"),
+    tabbar: $("tabbar"), tabIndicator: $("tabIndicator"),
+    tabOverview: $("tabOverview"), tabMembers: $("tabMembers"), tabBattle: $("tabBattle"),
     chartChips: $("chartChips"), chartSourceNote: $("chartSourceNote"), pointsChart: $("pointsChart"),
+    rankUpGrid: $("rankUpGrid"), formRow: $("formRow"),
     rosterHead: $("rosterHead"), rosterBody: $("rosterBody"), rosterCount: $("rosterCount"),
     gapCards: $("gapCards"),
+    battleTitle: $("battleTitle"), battleSub: $("battleSub"), battleBody: $("battleBody"),
     statusLine: $("statusLine"),
   };
 
@@ -85,7 +84,6 @@
 
     const mc = $("memberCount"), mcOut = $("memberCountOut");
     mc.addEventListener("input", () => { mcOut.textContent = mc.value; state.settings.memberCount = +mc.value; render(); });
-
     $("usernameFilter").addEventListener("input", (e) => { state.settings.usernameFilter = e.target.value; render(); });
 
     $("viewModeSwitch").addEventListener("click", (e) => {
@@ -108,12 +106,11 @@
       el.settingsBtn.setAttribute("aria-pressed", String(open));
       el.drawerScrim.hidden = !open;
     });
-    el.drawerScrim.addEventListener("click", closeDrawer);
-    function closeDrawer() {
+    el.drawerScrim.addEventListener("click", () => {
       el.settingsDrawer.classList.remove("is-open");
       el.settingsBtn.setAttribute("aria-pressed", "false");
       el.drawerScrim.hidden = true;
-    }
+    });
 
     el.soundBtn.addEventListener("click", () => {
       const next = !PS99Sounds.isEnabled();
@@ -126,6 +123,7 @@
     el.soundBtn.setAttribute("aria-pressed", String(soundOn));
   }
 
+  // ---------- search / mode / tabs wiring ----------
   function wireSearch() {
     el.modeSwitch.addEventListener("click", (e) => {
       const btn = e.target.closest(".mode-btn"); if (!btn) return;
@@ -133,6 +131,7 @@
       btn.classList.add("is-active"); btn.setAttribute("aria-selected", "true");
       state.mode = btn.dataset.mode;
       renderSuggestions("");
+      if (state.view === "browse") showBrowse(state.mode);
     });
 
     el.searchForm.addEventListener("submit", (e) => {
@@ -142,20 +141,45 @@
       el.suggestions.hidden = true;
       doSearch(name, state.mode);
     });
-
     el.searchInput.addEventListener("input", () => renderSuggestions(el.searchInput.value.trim()));
     el.searchInput.addEventListener("focus", () => renderSuggestions(el.searchInput.value.trim()));
     document.addEventListener("click", (e) => {
       if (!e.target.closest(".search-input-wrap")) el.suggestions.hidden = true;
     });
+
+    el.backBtn.addEventListener("click", () => showBrowse(state.mode));
+
+    el.tabbar.addEventListener("click", (e) => {
+      const btn = e.target.closest(".tab-btn"); if (!btn) return;
+      setActiveTab(btn.dataset.tab);
+    });
+  }
+
+  function setActiveTab(tab) {
+    state.activeTab = tab;
+    [...el.tabbar.querySelectorAll(".tab-btn")].forEach((b) => {
+      const active = b.dataset.tab === tab;
+      b.classList.toggle("is-active", active);
+      b.setAttribute("aria-selected", String(active));
+    });
+    el.tabOverview.hidden = tab !== "overview";
+    el.tabMembers.hidden = tab !== "members";
+    el.tabBattle.hidden = tab !== "battle";
+    positionTabIndicator();
+    if (tab === "battle") renderBattleTab();
+  }
+  function positionTabIndicator() {
+    const activeBtn = el.tabbar.querySelector(".tab-btn.is-active");
+    if (!activeBtn) return;
+    el.tabIndicator.style.left = activeBtn.offsetLeft + "px";
+    el.tabIndicator.style.width = activeBtn.offsetWidth + "px";
   }
 
   async function renderSuggestions(query) {
     const board = await getLeaderboard(state.mode);
     if (!board || !board.entries?.length) { el.suggestions.hidden = true; return; }
     const q = query.toLowerCase();
-    const pool = board.entries;
-    const matches = (q ? pool.filter((c) => c.Name.toLowerCase().includes(q)) : pool).slice(0, 8);
+    const matches = (q ? board.entries.filter((c) => c.Name.toLowerCase().includes(q)) : board.entries).slice(0, 8);
     if (!matches.length) { el.suggestions.hidden = true; return; }
     el.suggestions.innerHTML = matches.map((c) => `
       <div class="suggestion-item" data-name="${escapeHtml(c.Name)}">
@@ -173,38 +197,51 @@
     });
   }
 
-  function escapeHtml(s) { return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
-
-  // ---------- leaderboard snapshot (committed by the GitHub Action) ----------
+  // ---------- leaderboard snapshot ----------
   async function getLeaderboard(kind) {
-    if (!state.leaderboards[kind]) {
-      state.leaderboards[kind] = await PS99History.loadLeaderboard(kind);
-    }
+    if (!state.leaderboards[kind]) state.leaderboards[kind] = await PS99History.loadLeaderboard(kind);
     return state.leaderboards[kind];
   }
 
-  async function primeEmptyState() {
-    const board = await getLeaderboard("clan");
-    if (!board || !board.entries?.length) return;
-    el.emptySuggest.innerHTML = board.entries.slice(0, 5).map((c) =>
-      `<button data-name="${escapeHtml(c.Name)}">${escapeHtml(c.Name)}</button>`).join("");
-    [...el.emptySuggest.children].forEach((btn) => {
-      btn.addEventListener("click", () => { el.searchInput.value = btn.dataset.name; doSearch(btn.dataset.name, "clan"); });
+  // ---------- browse (top-100 grid) ----------
+  async function showBrowse(kind) {
+    state.view = "browse"; state.mode = kind;
+    clearTimeout(state.refreshTimer); clearInterval(state.countdownTimer);
+    el.dashboard.hidden = true;
+    el.browseState.hidden = false;
+    el.browseTitle.textContent = kind === "clan" ? "Top clans" : "Top leagues";
+    el.browseGrid.innerHTML = Array.from({ length: 8 }).map(() => `<div class="browse-card skeleton" aria-hidden="true"></div>`).join("");
+
+    const board = await getLeaderboard(kind);
+    if (!board || !board.entries?.length) {
+      el.browseGrid.innerHTML = `<div class="form-empty">No tracked leaderboard data yet — the collector Action may not have run. You can still search any ${kind} by name above.</div>`;
+      el.browseTotal.textContent = "";
+      return;
+    }
+    el.browseTotal.textContent = `${board.total.toLocaleString()} total ${kind}s tracked · showing top ${Math.min(100, board.entries.length)}`;
+    el.browseGrid.innerHTML = board.entries.slice(0, 100).map((c, i) => `
+      <button type="button" class="browse-card" style="--i:${i}" data-name="${escapeHtml(c.Name)}">
+        <img class="browse-card-icon" alt="" loading="lazy" src="${c.Icon ? PS99Api.iconUrl(c.Icon) : ""}" onerror="this.style.visibility='hidden'">
+        <div class="browse-card-body">
+          <div class="browse-card-rank">Position ${c.Rank}</div>
+          <div class="browse-card-name">${escapeHtml(c.Name)}</div>
+          <div class="browse-card-stats"><span class="pts">${fmtNum(c.Points)} pts</span><span>${c.Members ?? "?"} members</span></div>
+        </div>
+      </button>`).join("");
+    [...el.browseGrid.children].forEach((card) => {
+      card.addEventListener("click", () => { el.searchInput.value = card.dataset.name; doSearch(card.dataset.name, kind); });
     });
   }
 
   // ---------- search / refresh cycle ----------
-  function search(name, kind) { doSearch(name, kind); }
-
   async function doSearch(name, kind) {
     state.gen++;
     const gen = state.gen;
-    state.name = name; state.kind = kind; state.mode = kind;
+    state.name = name; state.kind = kind; state.mode = kind; state.view = "detail";
     state.prevPoints = new Map();
-    clearTimeout(state.refreshTimer);
-    clearInterval(state.countdownTimer);
+    clearTimeout(state.refreshTimer); clearInterval(state.countdownTimer);
 
-    el.emptyState.hidden = true;
+    el.browseState.hidden = true;
     el.dashboard.hidden = false;
     el.loadingOverlay.hidden = false;
     el.loadingText.textContent = `Loading ${kind} "${name}"…`;
@@ -220,19 +257,17 @@
 
       let resolvedNames = new Map();
       if (kind === "clan") {
-        const uids = (entity.Members || []).map((m) => m.UserID);
-        resolvedNames = await PS99Api.resolveUsernames(uids);
+        resolvedNames = await PS99Api.resolveUsernames((entity.Members || []).map((m) => m.UserID));
       }
       if (gen !== state.gen) return;
 
       const { rank, total, source, above, below } = await resolveRank(kind, entity, name);
       if (gen !== state.gen) return;
 
-      state.entity = entity; state.memberSample = sample; state.resolvedNames = resolvedNames;
-      state.rank = rank; state.rankTotal = total; state.rankSource = source;
-      state.neighborAbove = above; state.neighborBelow = below;
+      Object.assign(state, { entity, memberSample: sample, resolvedNames, rank, rankTotal: total, rankSource: source, neighborAbove: above, neighborBelow: below });
 
       el.loadingOverlay.hidden = true;
+      setActiveTab("overview");
       render();
       el.statusLine.textContent = `Updated ${new Date().toLocaleTimeString()}`;
       armCountdown();
@@ -254,27 +289,18 @@
       ]);
       if (gen !== state.gen) return;
       let resolvedNames = state.resolvedNames;
-      if (kind === "clan") {
-        const uids = (entity.Members || []).map((m) => m.UserID);
-        resolvedNames = await PS99Api.resolveUsernames(uids);
-      }
+      if (kind === "clan") resolvedNames = await PS99Api.resolveUsernames((entity.Members || []).map((m) => m.UserID));
       const { rank, total, source, above, below } = await resolveRank(kind, entity, name);
       if (gen !== state.gen) return;
 
       const prevTotal = state.entity?.Points;
-      state.entity = entity; state.memberSample = sample; state.resolvedNames = resolvedNames;
-      state.rank = rank; state.rankTotal = total; state.rankSource = source;
-      state.neighborAbove = above; state.neighborBelow = below;
+      Object.assign(state, { entity, memberSample: sample, resolvedNames, rank, rankTotal: total, rankSource: source, neighborAbove: above, neighborBelow: below });
 
       sweepScanBar();
       render();
       el.statusLine.textContent = `Updated ${new Date().toLocaleTimeString()}`;
-      if (entity.Points != null && prevTotal != null) {
-        if (entity.Points > prevTotal) PS99Sounds.chime();
-        else PS99Sounds.tick();
-      } else {
-        PS99Sounds.tick();
-      }
+      if (entity.Points != null && prevTotal != null) (entity.Points > prevTotal ? PS99Sounds.chime() : PS99Sounds.tick());
+      else PS99Sounds.tick();
     } catch (err) {
       el.statusLine.textContent = `Refresh failed: ${err.message}`;
       PS99Sounds.errorTone();
@@ -286,17 +312,13 @@
     }
   }
 
-  // Rank + neighbors: prefer the committed leaderboard snapshot (instant,
-  // no live calls, works for anything in the tracked top ~150). Falls back
-  // to a live lookup against the API for everything else.
   async function resolveRank(kind, entity, name) {
     const board = await getLeaderboard(kind);
     if (board && board.entries?.length) {
       const idx = board.entries.findIndex((c) => c.Name.toLowerCase() === name.toLowerCase());
       if (idx !== -1) {
         return {
-          rank: board.entries[idx].Rank, total: board.total || board.entries.length,
-          source: "tracked",
+          rank: board.entries[idx].Rank, total: board.total || board.entries.length, source: "tracked",
           above: idx > 0 ? board.entries[idx - 1] : null,
           below: idx < board.entries.length - 1 ? board.entries[idx + 1] : null,
         };
@@ -320,17 +342,72 @@
     const CIRC = 97.4;
     const tick = () => {
       const remain = Math.max(0, state.refreshDeadline - Date.now());
-      const frac = remain / totalMs;
-      el.ringFg.style.strokeDashoffset = String(CIRC * (1 - frac));
+      el.ringFg.style.strokeDashoffset = String(CIRC * (1 - remain / totalMs));
     };
     tick();
     state.countdownTimer = setInterval(tick, 250);
   }
-
   function sweepScanBar() {
     el.scanBar.classList.remove("is-active");
-    void el.scanBar.offsetWidth; // restart animation
+    void el.scanBar.offsetWidth;
     el.scanBar.classList.add("is-active");
+  }
+
+  // ---------- row data (with defensive field auto-detection) ----------
+  const CLAN_IGNORE = new Set([
+    "UserID", "JoinTime", "PermissionLevel", "DisplayName",
+    "Points", "ActiveBattlePoints", "BattlePoints", "ContributionPoints",
+    "Diamonds", "DonatedDiamonds", "DiamondsDonated", "Donations", "TotalDonated", "AllTimeDiamonds",
+  ]);
+  const LEAGUE_IGNORE = new Set(["UserID", "JoinTime", "DisplayName", "Points"]);
+
+  function buildRowData() {
+    const e = state.entity, kind = state.kind;
+    let rows = [];
+    if (kind === "clan") {
+      rows = (e.Members || []).map((m) => {
+        const uid = m.UserID;
+        const sample = state.memberSample.get(uid);
+        const raw = sample ? { ...m, ...sample } : m;
+        const name = sample ? String(sample.DisplayName) : (state.resolvedNames.get(uid) || String(uid));
+        const points = sample ? sample.ActiveBattlePoints : PS99Api.pick(m, ["Points", "ActiveBattlePoints", "BattlePoints", "ContributionPoints"]);
+        const gems = sample ? sample.AllTimeDiamonds : PS99Api.pick(m, ["Diamonds", "DonatedDiamonds", "DiamondsDonated", "Donations", "TotalDonated", "AllTimeDiamonds"]);
+        return { uid, name, points: points ?? null, gems: gems ?? null, joined: m.JoinTime, extra: PS99Api.extraNumericFields(raw, CLAN_IGNORE) };
+      });
+    } else {
+      const contrib = new Map((e.PointContributions || []).map((c) => [c.UserID, c]));
+      rows = (e.Members || []).map((m) => {
+        const c = contrib.get(m.UserID);
+        const raw = c ? { ...m, ...c } : m;
+        return { uid: m.UserID, name: m.DisplayName || String(m.UserID), points: c ? c.Points : 0, gems: null, joined: m.JoinTime, extra: PS99Api.extraNumericFields(raw, LEAGUE_IGNORE) };
+      });
+      if (e.Owner?.UserID) {
+        const c = contrib.get(e.Owner.UserID);
+        rows.push({ uid: e.Owner.UserID, name: (e.Owner.DisplayName || String(e.Owner.UserID)) + " (owner)", points: c ? c.Points : 0, gems: null, joined: e.Created, extra: {} });
+      }
+    }
+
+    const sortKey = state.sort.key, dir = state.sort.dir === "asc" ? 1 : -1;
+    rows.sort((a, b) => {
+      const av = sortKey.startsWith("extra:") ? a.extra[sortKey.slice(6)] : a[sortKey];
+      const bv = sortKey.startsWith("extra:") ? b.extra[sortKey.slice(6)] : b[sortKey];
+      if (typeof av === "string" || typeof bv === "string") return dir * String(av ?? "").localeCompare(String(bv ?? ""));
+      return dir * ((av ?? -Infinity) - (bv ?? -Infinity));
+    });
+
+    const needle = state.settings.usernameFilter.trim().toLowerCase();
+    const filtered = needle ? rows.filter((r) => r.name.toLowerCase().includes(needle)) : rows;
+    return { all: rows, filtered };
+  }
+
+  // Hourly-equivalent rate for a row, independent of the Live/Hourly toggle
+  // (used by the roster Δ column *and* the Player Form widget).
+  function rateFor(uid, points, now, forHourly) {
+    const prev = state.prevPoints.get(uid);
+    if (points == null || !prev) return null;
+    const dtH = Math.max(now - prev.ts, 1000) / 3600000;
+    const delta = points - prev.points;
+    return forHourly ? delta / dtH : delta;
   }
 
   // ---------- rendering ----------
@@ -340,25 +417,27 @@
     renderRoster();
     renderChart();
     renderGapCards();
+    renderRankUp();
+    requestAnimationFrame(positionTabIndicator);
   }
 
   function renderHero() {
     const e = state.entity, kind = state.kind;
-    const iconAsset = e.Icon;
-    if (iconAsset) {
-      const url = PS99Api.iconUrl(iconAsset);
+    if (e.Icon) {
+      const url = PS99Api.iconUrl(e.Icon);
+      el.heroIconFallback.hidden = true;
+      el.heroIcon.hidden = false;
       el.heroIcon.classList.add("skeleton");
       el.heroIcon.onload = () => el.heroIcon.classList.remove("skeleton");
-      el.heroIcon.onerror = () => { el.heroIcon.classList.remove("skeleton"); el.heroIcon.style.display = "none"; };
-      el.heroIcon.style.display = "";
-      el.heroIcon.src = url;
-      el.heroIcon.alt = e.Name || "";
+      el.heroIcon.onerror = () => { el.heroIcon.hidden = true; el.heroIconFallback.hidden = false; el.heroIconFallback.textContent = (e.Name || "?").slice(0, 2).toUpperCase(); };
+      el.heroIcon.src = url; el.heroIcon.alt = e.Name || "";
     } else {
-      el.heroIcon.style.display = "none";
+      el.heroIcon.hidden = true;
+      el.heroIconFallback.hidden = false;
+      el.heroIconFallback.textContent = (e.Name || "?").slice(0, 2).toUpperCase();
     }
 
     el.heroName.textContent = e.Name || state.name;
-
     if (state.rank) {
       el.rankBadge.hidden = false;
       el.rankBadge.textContent = `#${state.rank.toLocaleString()} of ${(state.rankTotal || 0).toLocaleString()}`;
@@ -388,50 +467,7 @@
   }
   function statChip(v, l) { return `<div class="hero-stat"><span class="v">${v}</span><span class="l">${l}</span></div>`; }
 
-  function buildRowData() {
-    const e = state.entity, kind = state.kind;
-    let rows = [];
-    if (kind === "clan") {
-      rows = (e.Members || []).map((m) => {
-        const uid = m.UserID;
-        const sample = state.memberSample.get(uid);
-        const name = sample ? String(sample.DisplayName) : (state.resolvedNames.get(uid) || String(uid));
-        return {
-          uid, name,
-          points: sample ? sample.ActiveBattlePoints : null,
-          gems: sample ? sample.AllTimeDiamonds : null,
-          joined: m.JoinTime,
-        };
-      });
-      rows.sort((a, b) => (b.points ?? -Infinity) - (a.points ?? -Infinity));
-    } else {
-      const contrib = new Map((e.PointContributions || []).map((c) => [c.UserID, c]));
-      rows = (e.Members || []).map((m) => {
-        const c = contrib.get(m.UserID);
-        return { uid: m.UserID, name: m.DisplayName || String(m.UserID), points: c ? c.Points : 0, gems: null, joined: m.JoinTime };
-      });
-      if (e.Owner?.UserID) {
-        const c = contrib.get(e.Owner.UserID);
-        rows.push({ uid: e.Owner.UserID, name: (e.Owner.DisplayName || String(e.Owner.UserID)) + " (owner)", points: c ? c.Points : 0, gems: null, joined: e.Created });
-      }
-      rows.sort((a, b) => (b.points ?? 0) - (a.points ?? 0));
-    }
-
-    const sortKey = state.sort.key, dir = state.sort.dir === "asc" ? 1 : -1;
-    if (sortKey !== "default") {
-      rows.sort((a, b) => {
-        const av = a[sortKey], bv = b[sortKey];
-        if (typeof av === "string" || typeof bv === "string") return dir * String(av ?? "").localeCompare(String(bv ?? ""));
-        return dir * ((av ?? -Infinity) - (bv ?? -Infinity));
-      });
-    }
-
-    const needle = state.settings.usernameFilter.trim().toLowerCase();
-    const filtered = needle ? rows.filter((r) => r.name.toLowerCase().includes(needle)) : rows;
-    return { all: rows, filtered };
-  }
-
-  const COLUMNS = [
+  const BASE_COLUMNS = [
     { key: "rank", label: "#" },
     { key: "name", label: "Name" },
     { key: "points", label: "Points", setting: "colPoints" },
@@ -442,7 +478,14 @@
 
   function renderRoster() {
     const kind = state.kind;
-    const cols = COLUMNS.filter((c) => (!c.setting || state.settings[c.setting]) && (!c.clanOnly || kind === "clan"));
+    const { filtered } = buildRowData();
+    const shown = filtered.slice(0, state.settings.memberCount);
+
+    const extraKeySet = new Set();
+    shown.forEach((r) => Object.keys(r.extra).forEach((k) => extraKeySet.add(k)));
+    const extraCols = [...extraKeySet].slice(0, 3).map((k) => ({ key: `extra:${k}`, label: PS99Api.prettyKey(k) }));
+
+    const cols = [...BASE_COLUMNS.filter((c) => (!c.setting || state.settings[c.setting]) && (!c.clanOnly || kind === "clan")), ...extraCols];
 
     el.rosterHead.innerHTML = cols.map((c) => {
       const label = c.key === "rate" ? (state.settings.viewMode === "hourly" ? "≈/hr" : "Δ") : c.label;
@@ -458,24 +501,15 @@
       });
     });
 
-    const { filtered } = buildRowData();
-    const shown = filtered.slice(0, state.settings.memberCount);
     const now = Date.now();
     const newPrev = new Map();
 
     el.rosterBody.innerHTML = shown.map((r, i) => {
-      const prev = state.prevPoints.get(r.uid);
+      const delta = rateFor(r.uid, r.points, now, state.settings.viewMode === "hourly");
+      if (r.points != null) newPrev.set(r.uid, { ts: now, points: r.points });
       let rateTxt = "-", rateClass = "muted-cell";
-      if (r.points != null) {
-        newPrev.set(r.uid, { ts: now, points: r.points });
-        if (prev) {
-          const dtH = Math.max(now - prev.ts, 1000) / 3600000;
-          const delta = r.points - prev.points;
-          if (state.settings.viewMode === "hourly") rateTxt = fmtNum(delta / dtH);
-          else rateTxt = delta ? fmtNum(delta) : "0";
-          rateClass = delta > 0 ? "pts-up" : delta < 0 ? "pts-down" : "muted-cell";
-        }
-      }
+      if (delta != null) { rateTxt = delta ? fmtNum(delta) : "0"; rateClass = delta > 0 ? "pts-up" : delta < 0 ? "pts-down" : "muted-cell"; }
+
       const cells = cols.map((c) => {
         if (c.key === "rank") return `<td>${i + 1}</td>`;
         if (c.key === "name") return `<td class="name-cell">${escapeHtml(r.name)}</td>`;
@@ -483,6 +517,7 @@
         if (c.key === "rate") return `<td class="${rateClass}">${rateTxt}</td>`;
         if (c.key === "gems") return `<td>${r.gems != null ? fmtNum(r.gems) : "-"}</td>`;
         if (c.key === "joined") return `<td>${fmtDate(r.joined)}</td>`;
+        if (c.key.startsWith("extra:")) { const v = r.extra[c.key.slice(6)]; return `<td>${v != null ? fmtNum(v) : "-"}</td>`; }
         return "<td>-</td>";
       }).join("");
       return `<tr>${cells}</tr>`;
@@ -490,6 +525,29 @@
 
     state.prevPoints = newPrev;
     el.rosterCount.textContent = `${shown.length} of ${filtered.length} shown`;
+
+    renderPlayerForm(shown, now);
+  }
+
+  async function renderPlayerForm(rows, now) {
+    const ranked = rows
+      .map((r) => ({ ...r, hourly: rateFor(r.uid, r.points, now, true) }))
+      .filter((r) => r.hourly != null && r.hourly > 0)
+      .sort((a, b) => b.hourly - a.hourly)
+      .slice(0, 3);
+
+    if (!ranked.length) {
+      el.formRow.innerHTML = `<div class="form-empty">Collecting data — best gainers show up after a couple of refreshes.</div>`;
+      return;
+    }
+    const avatars = await PS99Api.getAvatarHeadshots(ranked.map((r) => r.uid));
+    el.formRow.innerHTML = ranked.map((r) => {
+      const av = avatars.get(r.uid);
+      const img = av
+        ? `<img class="form-avatar" src="${av}" alt="" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'form-avatar-fallback',textContent:'${escapeHtml(r.name).slice(0, 2).toUpperCase()}'}))">`
+        : `<div class="form-avatar-fallback">${escapeHtml(r.name).slice(0, 2).toUpperCase()}</div>`;
+      return `<div class="form-card">${img}<div><div class="form-name">${escapeHtml(r.name)}</div><div class="form-gain">+${fmtNum(r.hourly)} · 1h</div></div></div>`;
+    }).join("");
   }
 
   async function renderChart() {
@@ -498,8 +556,7 @@
 
     const committed = await PS99History.loadHistory(kind, name);
     const session = PS99History.getSessionSeries(kind, name);
-    const committedSeries = committed?.points || [];
-    const series = PS99History.mergeSeries(committedSeries, session);
+    const series = PS99History.mergeSeries(committed?.points, session);
 
     if (series.length < 2) {
       el.chartSourceNote.textContent = "collecting live data…";
@@ -511,14 +568,12 @@
 
     const stats = PS99History.seriesStats(series);
     if (stats) {
+      const chip = (v, l) => `<div class="chip"><span class="v">${v}</span><span class="l">${l}</span></div>`;
       el.chartChips.innerHTML = [
-        chip(fmtNum(stats.total), "Total"),
-        chip(fmtNum(stats.avgPerHour), "Avg / h"),
-        chip(fmtNum(stats.bestPerHour), "Best / h"),
-        chip(fmtNum(stats.latestPerHour), "Latest / h"),
+        chip(fmtNum(stats.total), "Total"), chip(fmtNum(stats.avgPerHour), "Avg / h"),
+        chip(fmtNum(stats.bestPerHour), "Best / h"), chip(fmtNum(stats.latestPerHour), "Latest / h"),
       ].join("");
     }
-    function chip(v, l) { return `<div class="chip"><span class="v">${v}</span><span class="l">${l}</span></div>`; }
   }
 
   async function renderGapCards() {
@@ -535,19 +590,18 @@
       let trendHtml = "";
       if (myRate != null && theirRate != null) {
         const closing = myRate > theirRate;
-        const magnitude = Math.abs(myRate - theirRate);
-        trendHtml = `<div class="gap-trend ${closing ? "closing" : "extending"}">${closing ? "Closing" : "Extending"} · ${fmtNum(magnitude)}/h</div>`;
+        trendHtml = `<div class="gap-trend ${closing ? "closing" : "extending"}">${closing ? "Closing" : "Extending"} · ${fmtNum(Math.abs(myRate - theirRate))}/h</div>`;
       }
-
+      const rankLabel = who === "above" ? "#" + (state.rank - 1) : "#" + (state.rank + 1);
       cards.push(`
         <div class="gap-card">
           <div class="gap-card-head">
-            <div><span class="who">Gap to ${who === "above" ? "#" + (state.rank - 1) : "#" + (state.rank + 1)}</span><br><span class="name">${escapeHtml(neighbor.Name)}</span></div>
+            <div><span class="who">Gap to ${rankLabel}</span><br><span class="name">${escapeHtml(neighbor.Name)}</span></div>
             <span class="gap">${fmtNum(gap)}</span>
           </div>
           <div class="gap-stats">
-            <div class="gap-stat"><span class="v">${myRate != null ? fmtNum(myRate) : "-"}</span><span class="l">Your ${state.settings.viewMode === "hourly" ? "≈/h" : "gain"}</span></div>
-            <div class="gap-stat"><span class="v">${theirRate != null ? fmtNum(theirRate) : "-"}</span><span class="l">Their /h</span></div>
+            <div class="gap-stat"><span class="v">${myRate != null ? fmtNum(myRate) : "-"}</span><span class="l">Your ≈/h</span></div>
+            <div class="gap-stat"><span class="v">${theirRate != null ? fmtNum(theirRate) : "-"}</span><span class="l">Their ≈/h</span></div>
           </div>
           ${trendHtml}
         </div>`);
@@ -555,11 +609,104 @@
     el.gapCards.innerHTML = cards.length ? cards.join("") : `<div class="gap-empty">No leaderboard neighbors found for this ${kind}.</div>`;
   }
 
+  async function renderRankUp() {
+    const kind = state.kind, myPoints = state.entity.Points;
+    const board = await getLeaderboard(kind);
+    if (!board || !board.entries?.length || myPoints == null || !state.rank) {
+      el.rankUpGrid.innerHTML = `<div class="form-empty">Only available for the tracked top ~150 ${kind}s.</div>`;
+      return;
+    }
+    const targets = [];
+    if (state.rank > 1) targets.push({ label: "Next position", rank: state.rank - 1 });
+    for (const r of [1, 2, 3, 5, 10, 25, 50, 100]) if (r < state.rank) targets.push({ label: ordinal(r), rank: r });
+
+    el.rankUpGrid.innerHTML = targets.map((t) => {
+      const entry = board.entries[t.rank - 1];
+      if (!entry) return "";
+      const needed = entry.Points - myPoints;
+      const passed = needed <= 0;
+      return `<div class="rankup-cell">
+        <span class="l">${t.label}</span>
+        <span class="v ${passed ? "passed" : ""}">${passed ? "Passed" : fmtNum(needed)}</span>
+        <span class="sub">${fmtNum(entry.Points)} pts</span>
+      </div>`;
+    }).join("") || `<div class="form-empty">Already #1 — nothing left to chase.</div>`;
+  }
+
+  // ---------- current battle tab (defensive: shape isn't publicly documented) ----------
+  function findMedalFields(entity) {
+    return Object.entries(entity || {}).filter(([k, v]) => /medals?$/i.test(k) && typeof v === "number");
+  }
+  function findClanInBattle(battleData, name) {
+    if (!battleData) return null;
+    const nameLower = name.toLowerCase();
+    const candidateArrays = [];
+    if (Array.isArray(battleData)) candidateArrays.push(battleData);
+    for (const key of ["Clans", "Results", "Leaderboard", "Battles", "Data"]) {
+      if (Array.isArray(battleData[key])) candidateArrays.push(battleData[key]);
+    }
+    for (const arr of candidateArrays) {
+      const hit = arr.find((it) => {
+        const n = PS99Api.pick(it, ["ClanName", "Name"]);
+        return n && String(n).toLowerCase() === nameLower;
+      });
+      if (hit) return hit;
+    }
+    if (battleData[name]) return battleData[name];
+    const foundKey = Object.keys(battleData).find((k) => k.toLowerCase() === nameLower);
+    return foundKey ? battleData[foundKey] : null;
+  }
+  function extractContributionPoints(clanBattleEntry) {
+    if (!clanBattleEntry) return [];
+    let list = PS99Api.pick(clanBattleEntry, ["Contribution", "Members", "Players", "Scores"]);
+    if (list && !Array.isArray(list)) list = PS99Api.pick(list, ["Battle", "Points"]);
+    if (!Array.isArray(list)) return [];
+    return list.map((it) => PS99Api.pick(it, ["Points", "Score", "Amount"])).filter((v) => typeof v === "number");
+  }
+
+  async function renderBattleTab() {
+    const kind = state.kind, e = state.entity;
+    if (kind !== "clan") {
+      el.battleTitle.textContent = "Current battle";
+      el.battleSub.textContent = "";
+      el.battleBody.innerHTML = `<div class="battle-empty">Battle data is a clan-only feature.</div>`;
+      return;
+    }
+    el.battleBody.innerHTML = `<div class="battle-empty">Loading…</div>`;
+    const battleData = await PS99Api.getActiveClanBattle();
+    const entry = findClanInBattle(battleData, e.Name || state.name);
+    const points = extractContributionPoints(entry);
+    const battleName = PS99Api.pick(battleData, ["Name", "BattleName", "Title"]) || PS99Api.pick(entry, ["Name", "BattleName"]) || "Current battle";
+    el.battleTitle.textContent = battleName;
+
+    const medals = findMedalFields(e);
+    const parts = [];
+    if (points.length) {
+      const avg = points.reduce((a, b) => a + b, 0) / points.length;
+      const max = Math.max(...points), min = Math.min(...points);
+      el.battleSub.textContent = `${points.length} members with battle points`;
+      parts.push(`<div class="battle-stat-row">
+        ${statChip(fmtNum(avg), "Average points")}
+        ${statChip(fmtNum(max), "Highest points")}
+        ${statChip(fmtNum(min), "Lowest points")}
+      </div>`);
+    } else {
+      el.battleSub.textContent = "";
+      parts.push(`<div class="battle-empty">No active-battle contribution data found for this clan right now.</div>`);
+    }
+    if (medals.length) {
+      const total = medals.reduce((a, [, v]) => a + v, 0);
+      parts.push(`<div><strong>Battle medals</strong> · total ${total}</div><div class="medal-row">${medals.map(([k, v]) => `<span class="medal-pill">${PS99Api.prettyKey(k.replace(/Medals?$/i, ""))}: ${v}</span>`).join("")}</div>`);
+    }
+    el.battleBody.innerHTML = parts.join("");
+  }
+
   // ---------- init ----------
   function init() {
     wireSettings();
     wireSearch();
-    primeEmptyState();
+    showBrowse("clan");
+    window.addEventListener("resize", positionTabIndicator);
   }
   document.addEventListener("DOMContentLoaded", init);
 })();
