@@ -1,0 +1,36 @@
+name: Collect PS99 snapshot
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"   # every 15 minutes
+  workflow_dispatch: {}       # allow manual "Run workflow" too
+
+concurrency:
+  group: ps99-collector
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Collect leaderboard + history snapshot
+        run: node scripts/collect.mjs
+        env:
+          TRACKED_TOP_N: "150"
+
+      - name: Commit data if changed
+        run: |
+          git config user.name "ps99-stats-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add data
+          git diff --cached --quiet || git commit -m "chore: snapshot $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          git push
