@@ -9,7 +9,480 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/style.css">
+<style>
+/* ===========================================================
+   PS99 Stats — design tokens
+   Palette: near-black dashboard, lime = live/positive,
+   coral = negative/danger, amber = raw point values.
+   Display: Oswald (condensed, stat-board energy)
+   Body: Inter · Tabular data: JetBrains Mono
+=========================================================== */
+:root{
+  --bg: #08090b;
+  --bg-elevated: #131519;
+  --bg-elevated-2: #1b1e24;
+  --border: #23262d;
+  --border-soft: #1a1c22;
+  --text: #edeff2;
+  --text-dim: #8a8f9a;
+  --text-faint: #565a63;
+
+  --lime: #c6ff3d;
+  --lime-dim: #8fbf2b;
+  --coral: #ff5d73;
+  --amber: #ffb020;
+  --blue: #6ea8ff;
+
+  --radius-sm: 6px;
+  --radius: 10px;
+  --radius-lg: 16px;
+
+  --font-display: "Oswald", "Arial Narrow", sans-serif;
+  --font-body: "Inter", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+
+  --shadow-card: 0 1px 0 rgba(255,255,255,0.02) inset, 0 8px 24px rgba(0,0,0,0.35);
+}
+
+@media (prefers-color-scheme: light){
+  /* Site is intentionally dark-only, like the reference dashboards it mirrors. */
+}
+
+*{ box-sizing: border-box; }
+html,body{ height:100%; }
+body{
+  margin:0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+  background-image:
+    radial-gradient(circle at 15% -10%, rgba(198,255,61,0.06), transparent 40%),
+    radial-gradient(circle at 85% 0%, rgba(255,93,115,0.05), transparent 35%);
+  background-attachment: fixed;
+}
+
+::selection{ background: rgba(198,255,61,0.25); color: var(--text); }
+
+:focus-visible{
+  outline: 2px solid var(--lime);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+@media (prefers-reduced-motion: reduce){
+  *, *::before, *::after{
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+a{ color: var(--lime); }
+
+/* ---------- signature: scanning activity bar ---------- */
+.scan-bar{
+  position: fixed; top:0; left:0; right:0; height:2px; z-index: 60;
+  background: linear-gradient(90deg, transparent, var(--lime), var(--blue), var(--coral), transparent);
+  background-size: 200% 100%;
+  opacity: 0;
+  transition: opacity .25s ease;
+}
+.scan-bar.is-active{
+  opacity: 1;
+  animation: sweep 1.1s ease-in-out;
+}
+@keyframes sweep{
+  0%{ background-position: 200% 0; }
+  100%{ background-position: -50% 0; }
+}
+
+/* ---------- topbar ---------- */
+.topbar{
+  position: sticky; top:0; z-index: 40;
+  background: rgba(8,9,11,0.85);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--border-soft);
+  box-shadow: 0 1px 24px rgba(0,0,0,0.25);
+}
+.topbar-inner{
+  max-width: 1180px; margin: 0 auto;
+  display:flex; align-items:center; gap:18px;
+  padding: 12px 20px;
+}
+.brand{
+  font-family: var(--font-display);
+  font-weight: 700;
+  letter-spacing: .5px;
+  white-space: nowrap;
+  font-size: 20px;
+  display:flex; align-items:center; gap:8px;
+}
+.brand-glyph{
+  width:22px; height:22px; border-radius:6px;
+  background: linear-gradient(135deg, var(--lime), var(--blue));
+  display:inline-block;
+}
+.brand-mark{ color: var(--text); }
+.brand-tail{ color: var(--lime); margin-left: 4px; }
+
+.searchbar{
+  flex: 1;
+  display:flex; align-items:center; gap:8px;
+  max-width: 560px;
+}
+.mode-switch{
+  display:flex; background: var(--bg-elevated); border:1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 3px; flex-shrink:0;
+}
+.mode-btn{
+  border:0; background:transparent; color: var(--text-dim);
+  font-family: var(--font-body); font-weight:600; font-size: 13px;
+  padding: 6px 12px; border-radius: 4px; cursor:pointer;
+  transition: background .15s, color .15s;
+}
+.mode-btn.is-active{ background: var(--lime); color:#0a0b0d; }
+.mode-btn:not(.is-active):hover{ color: var(--text); }
+
+.search-input-wrap{ position:relative; flex:1; }
+#searchInput{
+  width:100%; background: var(--bg-elevated); border:1px solid var(--border);
+  color: var(--text); font-family: var(--font-body); font-size:14px;
+  padding: 9px 12px; border-radius: var(--radius-sm);
+  transition: border-color .15s, box-shadow .15s;
+}
+#searchInput:focus{
+  border-color: var(--lime); box-shadow: 0 0 0 3px rgba(198,255,61,0.12); outline:none;
+}
+.suggestions{
+  position:absolute; top: calc(100% + 6px); left:0; right:0;
+  background: var(--bg-elevated); border:1px solid var(--border);
+  border-radius: var(--radius-sm); overflow:hidden; z-index: 50;
+  box-shadow: var(--shadow-card);
+  max-height: 280px; overflow-y:auto;
+}
+.suggestion-item{
+  display:flex; align-items:center; gap:10px;
+  padding: 8px 12px; cursor:pointer; font-size: 13px;
+  border-bottom: 1px solid var(--border-soft);
+}
+.suggestion-item:last-child{ border-bottom:0; }
+.suggestion-item:hover, .suggestion-item.is-active{ background: var(--bg-elevated-2); }
+.suggestion-rank{ color: var(--text-faint); font-family: var(--font-mono); width: 34px; flex-shrink:0; }
+.suggestion-name{ flex:1; }
+.suggestion-pts{ color: var(--amber); font-family: var(--font-mono); font-size:12px; }
+
+.btn-search{
+  border:0; background: var(--lime); color:#0a0b0d; cursor:pointer;
+  width: 38px; height: 38px; border-radius: var(--radius-sm);
+  display:flex; align-items:center; justify-content:center; flex-shrink:0;
+  transition: transform .12s ease, filter .12s ease;
+}
+.btn-search:hover{ filter: brightness(1.08); }
+.btn-search:active{ transform: scale(0.94); }
+
+.topbar-actions{ display:flex; align-items:center; gap:6px; flex-shrink:0; }
+.icon-btn{
+  width:34px; height:34px; border-radius: var(--radius-sm);
+  border:1px solid var(--border); background: var(--bg-elevated); color: var(--text-dim);
+  display:flex; align-items:center; justify-content:center; cursor:pointer;
+  transition: color .15s, border-color .15s;
+}
+.icon-btn:hover{ color: var(--text); border-color: var(--lime); }
+.icon-btn[aria-pressed="true"]{ color: var(--lime); border-color: rgba(198,255,61,0.4); }
+
+.refresh-ring{ display:flex; align-items:center; justify-content:center; }
+.ring-bg{ fill:none; stroke: var(--border); stroke-width: 2.5; }
+.ring-fg{
+  fill:none; stroke: var(--lime); stroke-width: 2.5; stroke-linecap: round;
+  transform: rotate(-90deg); transform-origin: 50% 50%;
+  stroke-dasharray: 97.4; stroke-dashoffset: 0;
+  transition: stroke-dashoffset 1s linear;
+}
+
+/* ---------- settings drawer ---------- */
+.drawer-scrim{
+  position:fixed; inset:0; background: rgba(0,0,0,0.5); z-index: 45;
+  opacity:0; transition: opacity .2s ease;
+}
+.drawer-scrim:not([hidden]){ opacity:1; }
+.settings-drawer{
+  position: fixed; top:0; right:0; bottom:0; width: 300px; z-index: 50;
+  background: var(--bg-elevated); border-left: 1px solid var(--border);
+  padding: 20px; overflow-y: auto;
+  transform: translateX(100%);
+  transition: transform .25s cubic-bezier(.2,.9,.3,1);
+}
+.settings-drawer.is-open{ transform: translateX(0); }
+.settings-drawer h2{
+  font-family: var(--font-display); font-size: 15px; text-transform: uppercase;
+  letter-spacing: .8px; color: var(--text-dim); margin: 0 0 16px;
+}
+.setting-group{ margin-bottom: 20px; }
+.setting-label{
+  display:block; font-size: 12px; font-weight:600; color: var(--text-dim);
+  text-transform: uppercase; letter-spacing: .5px; margin-bottom: 8px;
+}
+.toggle{
+  display:flex; align-items:center; gap:8px; padding: 6px 0;
+  font-size: 13.5px; cursor:pointer; user-select:none;
+}
+.toggle input{ accent-color: var(--lime); width:15px; height:15px; }
+.text-input{
+  width:100%; background: var(--bg-elevated-2); border:1px solid var(--border);
+  color: var(--text); padding: 7px 10px; border-radius: var(--radius-sm); font-size:13px;
+}
+input[type="range"]{ width:100%; accent-color: var(--lime); }
+#memberCountOut{ font-family: var(--font-mono); color: var(--lime); font-size:12px; }
+
+.segmented{ display:flex; background: var(--bg-elevated-2); border-radius: var(--radius-sm); padding:3px; gap:2px; }
+.seg-btn{
+  flex:1; border:0; background:transparent; color: var(--text-dim); cursor:pointer;
+  padding: 6px 8px; font-size:12.5px; font-weight:600; border-radius:4px;
+  transition: background .15s, color .15s;
+}
+.seg-btn.is-active{ background: var(--lime); color:#0a0b0d; }
+
+/* ---------- layout ---------- */
+.app-shell{ max-width: 1180px; margin: 0 auto; padding: 28px 20px 60px; min-height: 60vh; }
+
+.browse-state{ animation: fadein .35s ease; }
+.browse-head{
+  display:flex; justify-content:space-between; align-items:flex-end; gap:16px;
+  flex-wrap:wrap; margin-bottom: 20px;
+}
+.browse-head h1{
+  font-family: var(--font-display); font-weight:700; font-size: 26px; margin: 0 0 4px;
+}
+.browse-head p{ color: var(--text-dim); font-size: 13.5px; margin:0; }
+.browse-meta{ font-family: var(--font-mono); color: var(--text-faint); font-size: 12.5px; }
+.browse-grid{
+  display:grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px;
+}
+.browse-card{
+  background: var(--bg-elevated); border:1px solid var(--border); border-radius: var(--radius);
+  padding: 14px; display:flex; gap:12px; align-items:center; cursor:pointer; text-align:left;
+  transition: transform .15s ease, border-color .15s ease, box-shadow .15s ease;
+  animation: cardIn .3s ease backwards;
+}
+.browse-card:hover{ transform: translateY(-2px); border-color: rgba(198,255,61,0.4); box-shadow: 0 6px 18px rgba(0,0,0,0.3); }
+.browse-card:nth-child(n){ animation-delay: calc(var(--i, 0) * 18ms); }
+@keyframes cardIn{ from{ opacity:0; transform: translateY(6px);} to{ opacity:1; transform:none; } }
+.browse-card.skeleton{ height: 74px; }
+.browse-card-icon{
+  width:44px; height:44px; border-radius:10px; object-fit:contain; flex-shrink:0;
+  background: var(--bg-elevated-2); border: 1px solid var(--border);
+}
+.browse-card-body{ min-width:0; flex:1; }
+.browse-card-rank{ font-family: var(--font-mono); color: var(--text-faint); font-size: 11px; }
+.browse-card-name{
+  font-family: var(--font-display); font-weight:600; font-size: 15px;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+.browse-card-stats{ display:flex; gap:10px; font-size:11.5px; color: var(--text-dim); margin-top:2px; }
+.browse-card-stats .pts{ color: var(--amber); font-family: var(--font-mono); }
+
+.back-btn{
+  background:none; border:0; color: var(--text-dim); font-size: 13px; cursor:pointer;
+  padding: 4px 0; margin-bottom: 12px; display:flex; align-items:center; gap:4px;
+  transition: color .15s;
+}
+.back-btn:hover{ color: var(--lime); }
+
+.hero-icon-fallback{
+  width:100%; height:100%; display:flex; align-items:center; justify-content:center;
+  font-family: var(--font-display); font-weight:700; font-size: 22px; color: var(--lime);
+  background: var(--bg-elevated-2);
+}
+
+.tabbar{
+  position: relative; display:flex; gap: 4px; border-bottom: 1px solid var(--border);
+  margin-bottom: 20px;
+}
+.tab-btn{
+  background:none; border:0; color: var(--text-dim); font-family: var(--font-display);
+  font-weight:600; font-size: 14px; letter-spacing:.3px; padding: 10px 4px; margin-right: 20px;
+  cursor:pointer; transition: color .15s;
+}
+.tab-btn:hover{ color: var(--text); }
+.tab-btn.is-active{ color: var(--text); }
+.tab-indicator{
+  position:absolute; bottom:-1px; height:2px; background: var(--lime);
+  transition: left .25s cubic-bezier(.3,.8,.4,1), width .25s cubic-bezier(.3,.8,.4,1);
+}
+.tab-panel{ animation: fadein .25s ease; }
+
+.rankup-grid{ display:grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap:10px; padding-bottom: 16px; }
+.rankup-cell{ background: var(--bg-elevated-2); border:1px solid var(--border); border-radius: var(--radius-sm); padding: 10px 12px; }
+.rankup-cell .l{ font-size: 10.5px; color: var(--text-faint); text-transform:uppercase; letter-spacing:.5px; }
+.rankup-cell .v{ font-family: var(--font-mono); font-weight:700; font-size: 14px; color: var(--lime); display:block; margin-top:2px; }
+.rankup-cell .v.passed{ color: var(--text-faint); }
+.rankup-cell .sub{ font-size: 10.5px; color: var(--text-faint); }
+
+.medal-row{ display:flex; gap:8px; flex-wrap:wrap; margin-top:10px; }
+.medal-pill{
+  font-family: var(--font-mono); font-size:12px; font-weight:700;
+  background: var(--bg-elevated-2); border:1px solid var(--border); border-radius: 20px;
+  padding: 5px 12px; color: var(--text);
+}
+.battle-empty{ color: var(--text-faint); font-size: 13.5px; padding: 16px 0; }
+.battle-stat-row{ display:flex; gap:12px; flex-wrap:wrap; margin: 10px 0 18px; }
+
+.form-row{ display:flex; gap:10px; flex-wrap:wrap; padding-bottom: 16px; }
+.form-card{
+  display:flex; align-items:center; gap:10px; background: var(--bg-elevated-2);
+  border:1px solid var(--border); border-radius: var(--radius-sm); padding: 9px 14px 9px 9px;
+  flex: 1 1 200px; min-width: 200px;
+}
+.form-avatar{
+  width:36px; height:36px; border-radius:50%; object-fit:cover; flex-shrink:0;
+  background: var(--bg-elevated); border: 1px solid var(--border);
+}
+.form-avatar-fallback{
+  width:36px; height:36px; border-radius:50%; flex-shrink:0; background: var(--bg-elevated);
+  border: 1px solid var(--border); display:flex; align-items:center; justify-content:center;
+  font-family: var(--font-display); font-weight:700; font-size:12px; color: var(--text-faint);
+}
+.form-name{ font-family: var(--font-body); font-weight:600; font-size: 13.5px; }
+.form-gain{ font-family: var(--font-mono); font-size: 12px; color: var(--lime); font-weight:600; }
+.form-empty{ color: var(--text-faint); font-size: 13px; padding: 8px 0 16px; }
+
+.dashboard{ position: relative; animation: fadein .35s ease; }
+@keyframes fadein{ from{ opacity:0; transform: translateY(6px);} to{ opacity:1; transform:none; } }
+
+.loading-overlay{
+  position:absolute; inset:0; z-index: 30;
+  background: rgba(8,9,11,0.6); backdrop-filter: blur(2px);
+  display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px;
+  border-radius: var(--radius-lg);
+  color: var(--text-dim); font-size: 13px;
+}
+@keyframes spin{ to{ transform: rotate(360deg); } }
+.spinner{
+  width: 30px; height:30px; border-radius:50%;
+  border: 3px solid var(--border); border-top-color: var(--lime);
+  animation: spin 0.8s linear infinite;
+}
+
+.skeleton{
+  background: linear-gradient(100deg, var(--bg-elevated-2) 30%, #262a33 50%, var(--bg-elevated-2) 70%);
+  background-size: 200% 100%;
+  animation: shimmer 1.3s ease-in-out infinite;
+}
+@keyframes shimmer{ from{ background-position: 150% 0; } to{ background-position: -50% 0; } }
+
+/* ---------- hero card ---------- */
+.hero-card{
+  display:flex; align-items:center; gap:20px; flex-wrap:wrap;
+  background: var(--bg-elevated); border:1px solid var(--border); border-radius: var(--radius-lg);
+  padding: 20px 22px; box-shadow: var(--shadow-card); margin-bottom: 20px;
+}
+.hero-icon-wrap{
+  width:72px; height:72px; border-radius: 14px; overflow:hidden;
+  border: 1px solid var(--border); flex-shrink:0; background: var(--bg-elevated-2);
+}
+.hero-icon{ width:100%; height:100%; object-fit: contain; display:block; }
+.hero-info{ flex:1; min-width: 200px; }
+.hero-title-row{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+.hero-title-row h1{
+  font-family: var(--font-display); font-weight:700; font-size: 26px; margin:0;
+  letter-spacing: .3px;
+}
+.rank-badge{
+  font-family: var(--font-mono); font-size:12.5px; font-weight:700;
+  background: rgba(198,255,61,0.12); color: var(--lime); border: 1px solid rgba(198,255,61,0.35);
+  padding: 3px 9px; border-radius: 20px;
+}
+.hero-meta{ color: var(--text-dim); font-size: 13px; margin-top: 4px; }
+.hero-meta span{ margin-right: 14px; }
+.hero-stats{ display:flex; gap: 20px; flex-wrap:wrap; }
+.hero-stat{ text-align:right; }
+.hero-stat .v{
+  font-family: var(--font-mono); font-weight:700; font-size: 19px; color: var(--amber);
+  display:block; font-variant-numeric: tabular-nums;
+}
+.hero-stat .l{ font-size: 10.5px; color: var(--text-faint); text-transform:uppercase; letter-spacing:.6px; }
+
+/* ---------- grid & panels ---------- */
+.grid-2col{ display:grid; grid-template-columns: 1fr 320px; gap:20px; align-items:start; }
+.panel{
+  background: var(--bg-elevated); border:1px solid var(--border); border-radius: var(--radius-lg);
+  padding: 18px 18px 8px; box-shadow: var(--shadow-card); margin-bottom: 20px;
+}
+.panel-head{ display:flex; align-items:baseline; justify-content:space-between; margin-bottom: 10px; }
+.panel-head h2{
+  font-family: var(--font-display); font-size: 15px; text-transform: uppercase;
+  letter-spacing: .8px; margin:0; color: var(--text);
+}
+.panel-sub{ font-size: 12px; color: var(--text-faint); font-family: var(--font-mono); }
+
+.chip-row{ display:flex; gap:10px; flex-wrap:wrap; margin-bottom: 14px; }
+.chip{
+  background: var(--bg-elevated-2); border:1px solid var(--border); border-radius: var(--radius-sm);
+  padding: 8px 14px; min-width: 84px;
+}
+.chip .v{ font-family: var(--font-mono); font-weight:700; font-size: 16px; color: var(--coral); display:block; }
+.chip .l{ font-size: 10px; color: var(--text-faint); text-transform:uppercase; letter-spacing:.5px; }
+.chart-wrap{ padding-bottom: 12px; }
+
+.table-wrap{ overflow-x:auto; padding-bottom: 10px; }
+.roster-table{ width:100%; border-collapse: collapse; font-size: 13px; }
+.roster-table th{
+  text-align:left; font-size: 10.5px; text-transform:uppercase; letter-spacing:.6px;
+  color: var(--text-faint); font-weight:600; padding: 8px 10px; border-bottom: 1px solid var(--border);
+  cursor:pointer; white-space:nowrap; user-select:none;
+}
+.roster-table th:hover{ color: var(--text-dim); }
+.roster-table th.sorted::after{ content:" ▾"; color: var(--lime); }
+.roster-table th.sorted.asc::after{ content:" ▴"; }
+.roster-table td{
+  padding: 8px 10px; border-bottom: 1px solid var(--border-soft);
+  font-family: var(--font-mono); font-variant-numeric: tabular-nums; white-space:nowrap;
+}
+.roster-table td.name-cell{ font-family: var(--font-body); font-weight:500; white-space:normal; }
+.roster-table tr{ transition: background-color .5s ease; }
+.roster-table tr:hover{ background: var(--bg-elevated-2); }
+.roster-table tr.row-flash{ background: rgba(198,255,61,0.10); }
+.pts-up{ color: var(--lime); }
+.pts-down{ color: var(--coral); }
+.muted-cell{ color: var(--text-faint); }
+
+/* ---------- gap-to-neighbors cards ---------- */
+.gap-cards{ display:flex; flex-direction:column; gap:12px; }
+.gap-card{
+  background: var(--bg-elevated-2); border:1px solid var(--border); border-radius: var(--radius);
+  padding: 12px 14px;
+}
+.gap-card-head{ display:flex; justify-content:space-between; align-items:baseline; margin-bottom:8px; }
+.gap-card-head .who{ font-size:11px; color: var(--text-faint); text-transform:uppercase; letter-spacing:.5px; }
+.gap-card-head .name{ font-family: var(--font-display); font-weight:600; font-size:16px; }
+.gap-card-head .gap{ font-family: var(--font-mono); font-weight:700; color: var(--amber); font-size:15px; }
+.gap-stats{ display:grid; grid-template-columns: 1fr 1fr; gap:8px; }
+.gap-stat{ background: var(--bg-elevated); border-radius: 6px; padding:7px 9px; }
+.gap-stat .v{ font-family: var(--font-mono); font-weight:700; font-size:13px; }
+.gap-stat .l{ font-size: 9.5px; color: var(--text-faint); text-transform:uppercase; letter-spacing:.4px; }
+.gap-trend{ margin-top:8px; font-size:12px; font-weight:600; }
+.gap-trend.closing{ color: var(--lime); }
+.gap-trend.extending{ color: var(--coral); }
+.gap-empty{ color: var(--text-faint); font-size: 13px; padding: 10px 4px; }
+
+/* ---------- footer ---------- */
+.site-footer{
+  display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap;
+  max-width: 1180px; margin: 0 auto; padding: 18px 20px 40px;
+  color: var(--text-faint); font-size: 11.5px;
+}
+
+/* ---------- responsive ---------- */
+@media (max-width: 860px){
+  .grid-2col{ grid-template-columns: 1fr; }
+  .searchbar{ order: 3; max-width:none; width:100%; }
+  .topbar-inner{ flex-wrap:wrap; }
+  .hero-stats{ width:100%; justify-content:space-between; }
+  .settings-drawer{ width: 86vw; }
+}
+
+</style>
 </head>
 <body>
 
@@ -18,6 +491,7 @@
 <header class="topbar">
   <div class="topbar-inner">
     <div class="brand">
+      <span class="brand-glyph" aria-hidden="true"></span>
       <span class="brand-mark">PS99</span><span class="brand-tail">STATS</span>
     </div>
 
@@ -231,10 +705,1198 @@
 </footer>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
-<script src="js/sounds.js"></script>
-<script src="js/api.js"></script>
-<script src="js/history.js"></script>
-<script src="js/charts.js"></script>
-<script src="js/app.js"></script>
+<script>
+/* ===========================================================
+   PS99Sounds — tiny synthesized UI cues via WebAudio.
+   No external audio files: keeps the site lightweight and
+   sidesteps any licensing questions around sourced sfx.
+=========================================================== */
+const PS99Sounds = (() => {
+  let ctx = null;
+  let enabled = localStorage.getItem("ps99_sound") !== "off";
+
+  function ensureCtx() {
+    if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)();
+    if (ctx.state === "suspended") ctx.resume();
+    return ctx;
+  }
+
+  function tone(freq, start, dur, gainPeak, type = "sine") {
+    const c = ensureCtx();
+    const osc = c.createOscillator();
+    const gain = c.createGain();
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, c.currentTime + start);
+    gain.gain.setValueAtTime(0, c.currentTime + start);
+    gain.gain.linearRampToValueAtTime(gainPeak, c.currentTime + start + 0.015);
+    gain.gain.exponentialRampToValueAtTime(0.0001, c.currentTime + start + dur);
+    osc.connect(gain).connect(c.destination);
+    osc.start(c.currentTime + start);
+    osc.stop(c.currentTime + start + dur + 0.02);
+  }
+
+  function tick() {
+    if (!enabled) return;
+    tone(720, 0, 0.09, 0.05, "sine");
+  }
+
+  function chime() {
+    if (!enabled) return;
+    tone(660, 0, 0.16, 0.06, "triangle");
+    tone(990, 0.07, 0.22, 0.05, "triangle");
+  }
+
+  function errorTone() {
+    if (!enabled) return;
+    tone(220, 0, 0.18, 0.05, "sawtooth");
+  }
+
+  function setEnabled(v) {
+    enabled = v;
+    localStorage.setItem("ps99_sound", v ? "on" : "off");
+    if (v) ensureCtx();
+  }
+
+  function isEnabled() { return enabled; }
+
+  return { tick, chime, errorTone, setEnabled, isEnabled };
+})();
+
+
+/* ===========================================================
+   PS99Api — thin wrapper around the public BIG Games API.
+   Docs: https://github.com/BIG-Games-LLC/ps99-public-api-docs
+
+   Caveats baked in on purpose (not bugs):
+   - Per-member points/gems for CLANS only exist for the ~25
+     top clans sampled by /v1/clans/players. Smaller clans
+     still get real usernames (via Roblox's users API) and a
+     full roster, just without those two numeric columns.
+   - LEAGUES expose exact per-member points for everyone.
+   - There's no history endpoint at all — that's what
+     data/history/*.json (built by the GitHub Action) is for.
+=========================================================== */
+const PS99Api = (() => {
+  const LEGACY = "https://ps99.biggamesapi.io/api";
+  const V1 = "https://ps99.biggamesapi.io/v1";
+  const IMG_PROXY = (id) => `https://ps99.biggamesapi.io/image/${id}`;
+
+  const nameCache = new Map(); // uid -> resolved username
+
+  async function getJSON(url, params) {
+    const u = new URL(url);
+    if (params) Object.entries(params).forEach(([k, v]) => u.searchParams.set(k, v));
+    const res = await fetch(u.toString());
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const body = await res.json();
+    if (body.status && body.status !== "ok") {
+      throw new Error(body.error?.message || "API error");
+    }
+    return body.data !== undefined ? body.data : body;
+  }
+
+  function assetIdOf(rbx) {
+    if (!rbx) return null;
+    return String(rbx).replace("rbxassetid://", "").trim();
+  }
+
+  function iconUrl(rbx) {
+    const id = assetIdOf(rbx);
+    return id ? IMG_PROXY(id) : null;
+  }
+
+  async function getClan(name) {
+    return getJSON(`${LEGACY}/clan/${encodeURIComponent(name)}`);
+  }
+
+  async function getLeague(name) {
+    return getJSON(`${V1}/leagues/${encodeURIComponent(name)}`);
+  }
+
+  async function getClanPlayerSample() {
+    try {
+      const data = await getJSON(`${V1}/clans/players`);
+      const map = new Map();
+      (data.players || []).forEach((p) => map.set(p.UserID, p));
+      return map;
+    } catch {
+      return new Map();
+    }
+  }
+
+  // The latest clan battle, active or not. This is a GLOBAL object (not
+  // filtered by clan) confirmed to exist at /api/activeClanBattle, but its
+  // internal shape isn't in the public docs — callers should treat it
+  // defensively (see PS99Api.pick / dynamicFields below).
+  let battleCache = null;
+  async function getActiveClanBattle() {
+    if (battleCache) return battleCache;
+    try {
+      battleCache = await getJSON(`${LEGACY}/activeClanBattle`);
+      return battleCache;
+    } catch {
+      return null;
+    }
+  }
+
+  // Returns the first defined value among a list of candidate field names.
+  // Used anywhere the API's exact per-member field naming isn't documented
+  // publicly — safer than hardcoding a guess that might just be wrong.
+  function pick(obj, keys) {
+    if (!obj) return undefined;
+    for (const k of keys) if (obj[k] !== undefined && obj[k] !== null) return obj[k];
+    return undefined;
+  }
+
+  // Any extra numeric fields on an object beyond a known/ignored set —
+  // lets the UI surface real data (donations, contribution points, etc.)
+  // under whatever field name the API actually uses, instead of us
+  // guessing a name that might not match.
+  function extraNumericFields(obj, ignoreKeys) {
+    const out = {};
+    for (const [k, v] of Object.entries(obj || {})) {
+      if (ignoreKeys.has(k)) continue;
+      if (typeof v === "number") out[k] = v;
+    }
+    return out;
+  }
+
+  function prettyKey(k) {
+    return k.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/^./, (c) => c.toUpperCase());
+  }
+
+  async function resolveUsernames(uids) {
+    const unique = [...new Set(uids.filter((u) => u != null))];
+    const result = new Map();
+    const uncached = [];
+    unique.forEach((u) => {
+      if (nameCache.has(u)) result.set(u, nameCache.get(u));
+      else uncached.push(u);
+    });
+    for (let i = 0; i < uncached.length; i += 100) {
+      const chunk = uncached.slice(i, i + 100);
+      try {
+        const res = await fetch("https://users.roblox.com/v1/users", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ userIds: chunk, excludeBannedUsers: false }),
+        });
+        const body = await res.json();
+        (body.data || []).forEach((item) => {
+          const name = item.displayName || item.name || String(item.id);
+          result.set(item.id, name);
+          nameCache.set(item.id, name);
+        });
+      } catch {
+        /* username resolution is a nice-to-have; roster still renders with IDs */
+      }
+    }
+    return result;
+  }
+
+  const RANK_PAGE_SIZE = 100;
+  const RANK_LINEAR_CAP_PAGES = 20; // cheap fallback cap: top 2000
+
+  // Live leaderboard rank finder: binary search when we know the entity's
+  // own point total (fast, ~log2(total/100) requests), otherwise a capped
+  // linear scan of the leaderboard's top 2000. Prefer PS99Store's committed
+  // snapshot (data/leaderboard/*.json) before calling this — it's instant
+  // and needs zero live requests for anything in the tracked top ~150.
+  async function findLeaderboardRank(kind, name, targetPoints) {
+    const nameLower = name.toLowerCase();
+    let total;
+    let getPage;
+
+    if (kind === "clan") {
+      total = await getJSON(`${LEGACY}/clansTotal`);
+      getPage = (p) => getJSON(`${LEGACY}/clans`, { page: p, pageSize: RANK_PAGE_SIZE, sort: "Points", sortOrder: "desc" });
+    } else {
+      const first = await getJSON(`${V1}/leagues`, { page: 1, pageSize: RANK_PAGE_SIZE, sort: "Points", sortOrder: "desc" });
+      total = first.total || 0;
+      getPage = async (p) => (await getJSON(`${V1}/leagues`, { page: p, pageSize: RANK_PAGE_SIZE, sort: "Points", sortOrder: "desc" })).leagues;
+    }
+    if (!total) return { rank: null, total: 0 };
+
+    if (targetPoints == null) {
+      const pages = Math.min(RANK_LINEAR_CAP_PAGES, Math.ceil(total / RANK_PAGE_SIZE));
+      for (let p = 1; p <= pages; p++) {
+        const items = await getPage(p);
+        if (!items || !items.length) break;
+        const idx = items.findIndex((it) => (it.Name || "").toLowerCase() === nameLower);
+        if (idx !== -1) return { rank: (p - 1) * RANK_PAGE_SIZE + idx + 1, total };
+      }
+      return { rank: null, total };
+    }
+
+    let lo = 1, hi = Math.max(1, Math.ceil(total / RANK_PAGE_SIZE));
+    while (lo <= hi) {
+      const mid = Math.floor((lo + hi) / 2);
+      const items = await getPage(mid);
+      if (!items || !items.length) { hi = mid - 1; continue; }
+      const top = items[0].Points, bottom = items[items.length - 1].Points;
+      if (targetPoints > top) { hi = mid - 1; }
+      else if (targetPoints < bottom) { lo = mid + 1; }
+      else {
+        let idx = items.findIndex((it) => (it.Name || "").toLowerCase() === nameLower);
+        if (idx === -1) idx = items.findIndex((it) => it.Points <= targetPoints);
+        return idx === -1 ? { rank: null, total } : { rank: (mid - 1) * RANK_PAGE_SIZE + idx + 1, total };
+      }
+    }
+    return { rank: null, total };
+  }
+
+  // Fetch the single entity sitting at leaderboard position `rank`
+  // (pageSize=1 means `page` IS the rank) — used for live neighbor lookups
+  // when an entity isn't in the committed top-150 snapshot.
+  async function getAtRank(kind, rank) {
+    if (rank < 1) return null;
+    try {
+      if (kind === "clan") {
+        const items = await getJSON(`${LEGACY}/clans`, { page: rank, pageSize: 1, sort: "Points", sortOrder: "desc" });
+        return items[0] || null;
+      }
+      const data = await getJSON(`${V1}/leagues`, { page: rank, pageSize: 1, sort: "Points", sortOrder: "desc" });
+      return (data.leagues || [])[0] || null;
+    } catch {
+      return null;
+    }
+  }
+
+  const avatarCache = new Map(); // uid -> image url
+  async function getAvatarHeadshots(uids) {
+    const unique = [...new Set(uids.filter((u) => u != null))];
+    const result = new Map();
+    const uncached = [];
+    unique.forEach((u) => {
+      if (avatarCache.has(u)) result.set(u, avatarCache.get(u));
+      else uncached.push(u);
+    });
+    if (uncached.length) {
+      try {
+        const url = `https://thumbnails.roblox.com/v1/users/avatar-headshot?userIds=${uncached.join(",")}&size=48x48&format=png&isCircular=true`;
+        const res = await fetch(url);
+        const body = await res.json();
+        (body.data || []).forEach((item) => {
+          if (item.imageUrl) { result.set(item.targetId, item.imageUrl); avatarCache.set(item.targetId, item.imageUrl); }
+        });
+      } catch { /* avatars are decorative; roster still works without them */ }
+    }
+    return result;
+  }
+
+  return {
+    getClan, getLeague, getClanPlayerSample, resolveUsernames, findLeaderboardRank, getAtRank,
+    getActiveClanBattle, getAvatarHeadshots, pick, extraNumericFields, prettyKey, iconUrl, assetIdOf,
+  };
+})();
+
+
+/* ===========================================================
+   PS99History — reads the GitHub-Actions-collected snapshots
+   in /data (same-origin, no CORS issues, works even if the
+   live API is having a bad day) and layers a short in-browser
+   "session" buffer on top so the chart/gap cards stay live
+   between the collector's ~15-minute snapshots.
+=========================================================== */
+const PS99History = (() => {
+  const leaderboardCache = new Map(); // kind -> {ts, data}
+  const historyCache = new Map();     // "kind:name" -> {ts, data}
+  const LEADERBOARD_TTL = 5 * 60 * 1000;
+  const HISTORY_TTL = 5 * 60 * 1000;
+  const SESSION_MAX_POINTS = 400;
+
+  function fileSafe(name) {
+    return encodeURIComponent(name.trim());
+  }
+
+  async function loadLeaderboard(kind) {
+    const cached = leaderboardCache.get(kind);
+    if (cached && Date.now() - cached.ts < LEADERBOARD_TTL) return cached.data;
+    try {
+      const res = await fetch(`data/leaderboard/${kind}s-latest.json`, { cache: "no-store" });
+      if (!res.ok) throw new Error("no snapshot");
+      const data = await res.json();
+      leaderboardCache.set(kind, { ts: Date.now(), data });
+      return data;
+    } catch {
+      return null; // not tracked yet / repo hasn't run the collector — caller falls back to live API
+    }
+  }
+
+  async function loadHistory(kind, name) {
+    const key = `${kind}:${name}`;
+    const cached = historyCache.get(key);
+    if (cached && Date.now() - cached.ts < HISTORY_TTL) return cached.data;
+    try {
+      const res = await fetch(`data/history/${kind}s/${fileSafe(name)}.json`, { cache: "no-store" });
+      if (!res.ok) throw new Error("no history");
+      const data = await res.json();
+      historyCache.set(key, { ts: Date.now(), data });
+      return data;
+    } catch {
+      return null;
+    }
+  }
+
+  function sessionKey(kind, name) {
+    return `ps99_session_${kind}_${name.toLowerCase()}`;
+  }
+
+  function pushSessionPoint(kind, name, points) {
+    const key = sessionKey(kind, name);
+    let series = [];
+    try { series = JSON.parse(sessionStorage.getItem(key) || "[]"); } catch { series = []; }
+    series.push([Date.now(), points]);
+    if (series.length > SESSION_MAX_POINTS) series = series.slice(-SESSION_MAX_POINTS);
+    try { sessionStorage.setItem(key, JSON.stringify(series)); } catch { /* storage full/unavailable, skip silently */ }
+    return series;
+  }
+
+  function getSessionSeries(kind, name) {
+    try { return JSON.parse(sessionStorage.getItem(sessionKey(kind, name)) || "[]"); } catch { return []; }
+  }
+
+  // Merge committed points-over-time (ms epoch, points) with anything the
+  // browser has collected this session, deduped and sorted.
+  function mergeSeries(committed, session) {
+    const merged = [...(committed || []), ...(session || [])];
+    merged.sort((a, b) => a[0] - b[0]);
+    const out = [];
+    for (const p of merged) {
+      if (!out.length || p[0] - out[out.length - 1][0] > 60000) out.push(p);
+    }
+    return out;
+  }
+
+  // Rate of change over the trailing `windowMs`, extrapolated to points/hour.
+  function hourlyRateFromSeries(series, windowMs = 60 * 60 * 1000) {
+    if (!series || series.length < 2) return null;
+    const now = series[series.length - 1][0];
+    const cutoff = now - windowMs;
+    let start = series[0];
+    for (const p of series) { if (p[0] >= cutoff) { start = p; break; } }
+    const end = series[series.length - 1];
+    const dtHours = (end[0] - start[0]) / 3600000;
+    if (dtHours <= 0) return null;
+    return (end[1] - start[1]) / dtHours;
+  }
+
+  function seriesStats(series) {
+    if (!series || series.length < 2) return null;
+    const hourly = [];
+    for (let i = 1; i < series.length; i++) {
+      const dtH = (series[i][0] - series[i - 1][0]) / 3600000;
+      if (dtH > 0) hourly.push((series[i][1] - series[i - 1][1]) / dtH);
+    }
+    if (!hourly.length) return null;
+    const total = series[series.length - 1][1] - series[0][1];
+    return {
+      total,
+      avgPerHour: hourly.reduce((a, b) => a + b, 0) / hourly.length,
+      bestPerHour: Math.max(...hourly),
+      latestPerHour: hourly[hourly.length - 1],
+    };
+  }
+
+  return { loadLeaderboard, loadHistory, pushSessionPoint, getSessionSeries, mergeSeries, hourlyRateFromSeries, seriesStats };
+})();
+
+
+/* ===========================================================
+   PS99Charts — one auto-scaling points/hour area chart,
+   styled to match the dark dashboard theme.
+=========================================================== */
+const PS99Charts = (() => {
+  let chart = null;
+
+  function fmtCompact(n) {
+    return new Intl.NumberFormat("en", { notation: "compact", maximumFractionDigits: 2 }).format(n);
+  }
+
+  function fmtClock(ts) {
+    return new Date(ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  }
+
+  function render(canvas, series) {
+    const ctx = canvas.getContext("2d");
+
+    const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height || 220);
+    gradient.addColorStop(0, "rgba(255,93,115,0.35)");
+    gradient.addColorStop(1, "rgba(255,93,115,0.02)");
+
+    const labels = series.map((p) => fmtClock(p[0]));
+    const values = series.map((p) => p[1]);
+
+    const cfg = {
+      type: "line",
+      data: {
+        labels,
+        datasets: [{
+          data: values,
+          borderColor: "#ff5d73",
+          backgroundColor: gradient,
+          borderWidth: 2,
+          fill: true,
+          tension: 0.35,
+          pointRadius: (c) => (c.dataIndex === values.length - 1 ? 4 : 0),
+          pointBackgroundColor: "#ff5d73",
+          pointBorderColor: "#08090b",
+          pointBorderWidth: 2,
+        }],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: { duration: 400 },
+        interaction: { mode: "index", intersect: false },
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            backgroundColor: "#131519",
+            borderColor: "#23262d",
+            borderWidth: 1,
+            titleColor: "#8a8f9a",
+            bodyColor: "#edeff2",
+            bodyFont: { family: "JetBrains Mono" },
+            padding: 10,
+            callbacks: { label: (c) => fmtCompact(c.parsed.y) + " pts" },
+          },
+        },
+        scales: {
+          x: {
+            grid: { display: false },
+            ticks: { color: "#565a63", maxTicksLimit: 6, font: { size: 10 } },
+          },
+          y: {
+            grid: { color: "#1a1c22" },
+            ticks: { color: "#565a63", font: { size: 10, family: "JetBrains Mono" }, callback: (v) => fmtCompact(v) },
+          },
+        },
+      },
+    };
+
+    if (chart) { chart.destroy(); }
+    chart = new Chart(ctx, cfg);
+    return chart;
+  }
+
+  return { render };
+})();
+
+
+/* ===========================================================
+   PS99 Stats — main controller
+=========================================================== */
+(() => {
+  "use strict";
+
+  // ---------- tiny formatters ----------
+  function fmtNum(n) {
+    if (n === null || n === undefined || Number.isNaN(n)) return "-";
+    const sign = n < 0 ? "-" : "";
+    n = Math.abs(n);
+    const units = ["", "K", "M", "B", "T", "Q"];
+    let i = 0;
+    while (n >= 1000 && i < units.length - 1) { n /= 1000; i++; }
+    const txt = i === 0 ? String(Math.round(n)) : (Math.round(n * 10) / 10).toString();
+    return sign + txt + units[i];
+  }
+  function fmtDate(ts) {
+    if (!ts) return "-";
+    const d = new Date(ts * (ts < 2e10 ? 1000 : 1));
+    return d.toISOString().slice(0, 10);
+  }
+  function flagEmoji(code) {
+    if (!code || code.length !== 2) return "";
+    const off = 127397;
+    return [...code.toUpperCase()].map((c) => String.fromCodePoint(c.charCodeAt(0) + off)).join("");
+  }
+  function ordinal(n) {
+    const s = ["th", "st", "nd", "rd"], v = n % 100;
+    return n + (s[(v - 20) % 10] || s[v] || s[0]);
+  }
+  function escapeHtml(s) { return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
+
+  // ---------- state ----------
+  const state = {
+    view: "browse",        // "browse" | "detail"
+    mode: "clan",           // clan/league toggle, applies to both browse + search
+    activeTab: "overview",
+    name: null, entity: null, kind: null,
+    memberSample: new Map(), resolvedNames: new Map(),
+    rank: null, rankTotal: null, rankSource: null,
+    neighborAbove: null, neighborBelow: null,
+    prevPoints: new Map(),
+    gen: 0,
+    settings: {
+      colCreated: true, colCountry: true, colPoints: true, colGems: true, colJoined: false,
+      memberCount: 20, usernameFilter: "", viewMode: "live", interval: 30, showAverages: true,
+    },
+    sort: { key: "points", dir: "desc" },
+    leaderboards: { clan: null, league: null },
+    refreshDeadline: 0, refreshTimer: null, countdownTimer: null,
+  };
+
+  const $ = (id) => document.getElementById(id);
+  const el = {
+    scanBar: $("scanBar"),
+    searchForm: $("searchForm"), searchInput: $("searchInput"), suggestions: $("suggestions"),
+    modeSwitch: $("modeSwitch"),
+    settingsBtn: $("settingsBtn"), settingsDrawer: $("settingsDrawer"), drawerScrim: $("drawerScrim"),
+    soundBtn: $("soundBtn"), soundOn: $("soundIconOn"), soundOff: $("soundIconOff"),
+    ringFg: $("ringFg"),
+    browseState: $("browseState"), browseGrid: $("browseGrid"), browseTitle: $("browseTitle"), browseTotal: $("browseTotal"),
+    dashboard: $("dashboard"), loadingOverlay: $("loadingOverlay"), loadingText: $("loadingText"), backBtn: $("backBtn"),
+    heroIcon: $("heroIcon"), heroIconFallback: $("heroIconFallback"), heroName: $("heroName"), rankBadge: $("rankBadge"),
+    heroMeta: $("heroMeta"), heroStats: $("heroStats"),
+    tabbar: $("tabbar"), tabIndicator: $("tabIndicator"),
+    tabOverview: $("tabOverview"), tabMembers: $("tabMembers"), tabBattle: $("tabBattle"),
+    chartChips: $("chartChips"), chartSourceNote: $("chartSourceNote"), pointsChart: $("pointsChart"),
+    rankUpGrid: $("rankUpGrid"), formRow: $("formRow"),
+    rosterHead: $("rosterHead"), rosterBody: $("rosterBody"), rosterCount: $("rosterCount"),
+    gapCards: $("gapCards"),
+    battleTitle: $("battleTitle"), battleSub: $("battleSub"), battleBody: $("battleBody"),
+    statusLine: $("statusLine"),
+  };
+
+  // ---------- settings wiring ----------
+  function wireSettings() {
+    $("colCreated").addEventListener("change", (e) => { state.settings.colCreated = e.target.checked; render(); });
+    $("colCountry").addEventListener("change", (e) => { state.settings.colCountry = e.target.checked; render(); });
+    $("colPoints").addEventListener("change", (e) => { state.settings.colPoints = e.target.checked; render(); });
+    $("colGems").addEventListener("change", (e) => { state.settings.colGems = e.target.checked; render(); });
+    $("colJoined").addEventListener("change", (e) => { state.settings.colJoined = e.target.checked; render(); });
+    $("showAverages").addEventListener("change", (e) => { state.settings.showAverages = e.target.checked; render(); });
+
+    const mc = $("memberCount"), mcOut = $("memberCountOut");
+    mc.addEventListener("input", () => { mcOut.textContent = mc.value; state.settings.memberCount = +mc.value; render(); });
+    $("usernameFilter").addEventListener("input", (e) => { state.settings.usernameFilter = e.target.value; render(); });
+
+    $("viewModeSwitch").addEventListener("click", (e) => {
+      const btn = e.target.closest(".seg-btn"); if (!btn) return;
+      [...e.currentTarget.children].forEach((b) => b.classList.remove("is-active"));
+      btn.classList.add("is-active");
+      state.settings.viewMode = btn.dataset.view;
+      render();
+    });
+    $("intervalSwitch").addEventListener("click", (e) => {
+      const btn = e.target.closest(".seg-btn"); if (!btn) return;
+      [...e.currentTarget.children].forEach((b) => b.classList.remove("is-active"));
+      btn.classList.add("is-active");
+      state.settings.interval = +btn.dataset.interval;
+      armCountdown();
+    });
+
+    el.settingsBtn.addEventListener("click", () => {
+      const open = el.settingsDrawer.classList.toggle("is-open");
+      el.settingsBtn.setAttribute("aria-pressed", String(open));
+      el.drawerScrim.hidden = !open;
+    });
+    el.drawerScrim.addEventListener("click", () => {
+      el.settingsDrawer.classList.remove("is-open");
+      el.settingsBtn.setAttribute("aria-pressed", "false");
+      el.drawerScrim.hidden = true;
+    });
+
+    el.soundBtn.addEventListener("click", () => {
+      const next = !PS99Sounds.isEnabled();
+      PS99Sounds.setEnabled(next);
+      el.soundOn.hidden = !next; el.soundOff.hidden = next;
+      el.soundBtn.setAttribute("aria-pressed", String(next));
+    });
+    const soundOn = PS99Sounds.isEnabled();
+    el.soundOn.hidden = !soundOn; el.soundOff.hidden = soundOn;
+    el.soundBtn.setAttribute("aria-pressed", String(soundOn));
+  }
+
+  // ---------- search / mode / tabs wiring ----------
+  function wireSearch() {
+    el.modeSwitch.addEventListener("click", (e) => {
+      const btn = e.target.closest(".mode-btn"); if (!btn) return;
+      [...el.modeSwitch.children].forEach((b) => { b.classList.remove("is-active"); b.setAttribute("aria-selected", "false"); });
+      btn.classList.add("is-active"); btn.setAttribute("aria-selected", "true");
+      state.mode = btn.dataset.mode;
+      renderSuggestions("");
+      if (state.view === "browse") showBrowse(state.mode);
+    });
+
+    el.searchForm.addEventListener("submit", (e) => {
+      e.preventDefault();
+      const name = el.searchInput.value.trim();
+      if (!name) return;
+      el.suggestions.hidden = true;
+      doSearch(name, state.mode);
+    });
+    el.searchInput.addEventListener("input", () => renderSuggestions(el.searchInput.value.trim()));
+    el.searchInput.addEventListener("focus", () => renderSuggestions(el.searchInput.value.trim()));
+    document.addEventListener("click", (e) => {
+      if (!e.target.closest(".search-input-wrap")) el.suggestions.hidden = true;
+    });
+
+    el.backBtn.addEventListener("click", () => showBrowse(state.mode));
+
+    el.tabbar.addEventListener("click", (e) => {
+      const btn = e.target.closest(".tab-btn"); if (!btn) return;
+      setActiveTab(btn.dataset.tab);
+    });
+  }
+
+  function setActiveTab(tab) {
+    state.activeTab = tab;
+    [...el.tabbar.querySelectorAll(".tab-btn")].forEach((b) => {
+      const active = b.dataset.tab === tab;
+      b.classList.toggle("is-active", active);
+      b.setAttribute("aria-selected", String(active));
+    });
+    el.tabOverview.hidden = tab !== "overview";
+    el.tabMembers.hidden = tab !== "members";
+    el.tabBattle.hidden = tab !== "battle";
+    positionTabIndicator();
+    if (tab === "battle") renderBattleTab();
+  }
+  function positionTabIndicator() {
+    const activeBtn = el.tabbar.querySelector(".tab-btn.is-active");
+    if (!activeBtn) return;
+    el.tabIndicator.style.left = activeBtn.offsetLeft + "px";
+    el.tabIndicator.style.width = activeBtn.offsetWidth + "px";
+  }
+
+  async function renderSuggestions(query) {
+    const board = await getLeaderboard(state.mode);
+    if (!board || !board.entries?.length) { el.suggestions.hidden = true; return; }
+    const q = query.toLowerCase();
+    const matches = (q ? board.entries.filter((c) => c.Name.toLowerCase().includes(q)) : board.entries).slice(0, 8);
+    if (!matches.length) { el.suggestions.hidden = true; return; }
+    el.suggestions.innerHTML = matches.map((c) => `
+      <div class="suggestion-item" data-name="${escapeHtml(c.Name)}">
+        <span class="suggestion-rank">#${c.Rank}</span>
+        <span class="suggestion-name">${escapeHtml(c.Name)}</span>
+        <span class="suggestion-pts">${fmtNum(c.Points)} pts</span>
+      </div>`).join("");
+    el.suggestions.hidden = false;
+    [...el.suggestions.children].forEach((row) => {
+      row.addEventListener("click", () => {
+        el.searchInput.value = row.dataset.name;
+        el.suggestions.hidden = true;
+        doSearch(row.dataset.name, state.mode);
+      });
+    });
+  }
+
+  // ---------- leaderboard snapshot ----------
+  async function getLeaderboard(kind) {
+    if (!state.leaderboards[kind]) state.leaderboards[kind] = await PS99History.loadLeaderboard(kind);
+    return state.leaderboards[kind];
+  }
+
+  // ---------- browse (top-100 grid) ----------
+  async function showBrowse(kind) {
+    state.view = "browse"; state.mode = kind;
+    clearTimeout(state.refreshTimer); clearInterval(state.countdownTimer);
+    el.dashboard.hidden = true;
+    el.browseState.hidden = false;
+    el.browseTitle.textContent = kind === "clan" ? "Top clans" : "Top leagues";
+    el.browseGrid.innerHTML = Array.from({ length: 8 }).map(() => `<div class="browse-card skeleton" aria-hidden="true"></div>`).join("");
+
+    const board = await getLeaderboard(kind);
+    if (!board || !board.entries?.length) {
+      el.browseGrid.innerHTML = `<div class="form-empty">No tracked leaderboard data yet — the collector Action may not have run. You can still search any ${kind} by name above.</div>`;
+      el.browseTotal.textContent = "";
+      return;
+    }
+    el.browseTotal.textContent = `${board.total.toLocaleString()} total ${kind}s tracked · showing top ${Math.min(100, board.entries.length)}`;
+    el.browseGrid.innerHTML = board.entries.slice(0, 100).map((c, i) => `
+      <button type="button" class="browse-card" style="--i:${i}" data-name="${escapeHtml(c.Name)}">
+        <img class="browse-card-icon" alt="" loading="lazy" src="${c.Icon ? PS99Api.iconUrl(c.Icon) : ""}" onerror="this.style.visibility='hidden'">
+        <div class="browse-card-body">
+          <div class="browse-card-rank">Position ${c.Rank}</div>
+          <div class="browse-card-name">${escapeHtml(c.Name)}</div>
+          <div class="browse-card-stats"><span class="pts">${fmtNum(c.Points)} pts</span><span>${c.Members ?? "?"} members</span></div>
+        </div>
+      </button>`).join("");
+    [...el.browseGrid.children].forEach((card) => {
+      card.addEventListener("click", () => { el.searchInput.value = card.dataset.name; doSearch(card.dataset.name, kind); });
+    });
+  }
+
+  // ---------- search / refresh cycle ----------
+  async function doSearch(name, kind) {
+    state.gen++;
+    const gen = state.gen;
+    state.name = name; state.kind = kind; state.mode = kind; state.view = "detail";
+    state.prevPoints = new Map();
+    clearTimeout(state.refreshTimer); clearInterval(state.countdownTimer);
+
+    el.browseState.hidden = true;
+    el.dashboard.hidden = false;
+    el.loadingOverlay.hidden = false;
+    el.loadingText.textContent = `Loading ${kind} "${name}"…`;
+    el.statusLine.textContent = "";
+    sweepScanBar();
+
+    try {
+      const [entity, sample] = await Promise.all([
+        kind === "clan" ? PS99Api.getClan(name) : PS99Api.getLeague(name),
+        kind === "clan" ? PS99Api.getClanPlayerSample() : Promise.resolve(new Map()),
+      ]);
+      if (gen !== state.gen) return;
+
+      let resolvedNames = new Map();
+      if (kind === "clan") {
+        resolvedNames = await PS99Api.resolveUsernames((entity.Members || []).map((m) => m.UserID));
+      }
+      if (gen !== state.gen) return;
+
+      const { rank, total, source, above, below } = await resolveRank(kind, entity, name);
+      if (gen !== state.gen) return;
+
+      Object.assign(state, { entity, memberSample: sample, resolvedNames, rank, rankTotal: total, rankSource: source, neighborAbove: above, neighborBelow: below });
+
+      el.loadingOverlay.hidden = true;
+      setActiveTab("overview");
+      render();
+      el.statusLine.textContent = `Updated ${new Date().toLocaleTimeString()}`;
+      armCountdown();
+      state.refreshTimer = setTimeout(() => silentRefresh(gen, name, kind), state.settings.interval * 1000);
+    } catch (err) {
+      if (gen !== state.gen) return;
+      el.loadingOverlay.hidden = true;
+      el.statusLine.textContent = `Not found: "${name}" (${err.message})`;
+      PS99Sounds.errorTone();
+    }
+  }
+
+  async function silentRefresh(gen, name, kind) {
+    if (gen !== state.gen) return;
+    try {
+      const [entity, sample] = await Promise.all([
+        kind === "clan" ? PS99Api.getClan(name) : PS99Api.getLeague(name),
+        kind === "clan" ? PS99Api.getClanPlayerSample() : Promise.resolve(new Map()),
+      ]);
+      if (gen !== state.gen) return;
+      let resolvedNames = state.resolvedNames;
+      if (kind === "clan") resolvedNames = await PS99Api.resolveUsernames((entity.Members || []).map((m) => m.UserID));
+      const { rank, total, source, above, below } = await resolveRank(kind, entity, name);
+      if (gen !== state.gen) return;
+
+      const prevTotal = state.entity?.Points;
+      Object.assign(state, { entity, memberSample: sample, resolvedNames, rank, rankTotal: total, rankSource: source, neighborAbove: above, neighborBelow: below });
+
+      sweepScanBar();
+      render();
+      el.statusLine.textContent = `Updated ${new Date().toLocaleTimeString()}`;
+      if (entity.Points != null && prevTotal != null) (entity.Points > prevTotal ? PS99Sounds.chime() : PS99Sounds.tick());
+      else PS99Sounds.tick();
+    } catch (err) {
+      el.statusLine.textContent = `Refresh failed: ${err.message}`;
+      PS99Sounds.errorTone();
+    } finally {
+      if (gen === state.gen) {
+        armCountdown();
+        state.refreshTimer = setTimeout(() => silentRefresh(gen, name, kind), state.settings.interval * 1000);
+      }
+    }
+  }
+
+  async function resolveRank(kind, entity, name) {
+    const board = await getLeaderboard(kind);
+    if (board && board.entries?.length) {
+      const idx = board.entries.findIndex((c) => c.Name.toLowerCase() === name.toLowerCase());
+      if (idx !== -1) {
+        return {
+          rank: board.entries[idx].Rank, total: board.total || board.entries.length, source: "tracked",
+          above: idx > 0 ? board.entries[idx - 1] : null,
+          below: idx < board.entries.length - 1 ? board.entries[idx + 1] : null,
+        };
+      }
+    }
+    try {
+      const { rank, total } = await PS99Api.findLeaderboardRank(kind, entity.Name || name, entity.Points ?? null);
+      if (!rank) return { rank: null, total, source: "live", above: null, below: null };
+      const [above, below] = await Promise.all([PS99Api.getAtRank(kind, rank - 1), PS99Api.getAtRank(kind, rank + 1)]);
+      return { rank, total, source: "live", above, below };
+    } catch {
+      return { rank: null, total: null, source: null, above: null, below: null };
+    }
+  }
+
+  // ---------- countdown ring ----------
+  function armCountdown() {
+    clearInterval(state.countdownTimer);
+    const totalMs = state.settings.interval * 1000;
+    state.refreshDeadline = Date.now() + totalMs;
+    const CIRC = 97.4;
+    const tick = () => {
+      const remain = Math.max(0, state.refreshDeadline - Date.now());
+      el.ringFg.style.strokeDashoffset = String(CIRC * (1 - remain / totalMs));
+    };
+    tick();
+    state.countdownTimer = setInterval(tick, 250);
+  }
+  function sweepScanBar() {
+    el.scanBar.classList.remove("is-active");
+    void el.scanBar.offsetWidth;
+    el.scanBar.classList.add("is-active");
+  }
+
+  // ---------- row data (with defensive field auto-detection) ----------
+  const CLAN_IGNORE = new Set([
+    "UserID", "JoinTime", "PermissionLevel", "DisplayName",
+    "Points", "ActiveBattlePoints", "BattlePoints", "ContributionPoints",
+    "Diamonds", "DonatedDiamonds", "DiamondsDonated", "Donations", "TotalDonated", "AllTimeDiamonds",
+  ]);
+  const LEAGUE_IGNORE = new Set(["UserID", "JoinTime", "DisplayName", "Points"]);
+
+  function buildRowData() {
+    const e = state.entity, kind = state.kind;
+    let rows = [];
+    if (kind === "clan") {
+      rows = (e.Members || []).map((m) => {
+        const uid = m.UserID;
+        const sample = state.memberSample.get(uid);
+        const raw = sample ? { ...m, ...sample } : m;
+        const name = sample ? String(sample.DisplayName) : (state.resolvedNames.get(uid) || String(uid));
+        const points = sample ? sample.ActiveBattlePoints : PS99Api.pick(m, ["Points", "ActiveBattlePoints", "BattlePoints", "ContributionPoints"]);
+        const gems = sample ? sample.AllTimeDiamonds : PS99Api.pick(m, ["Diamonds", "DonatedDiamonds", "DiamondsDonated", "Donations", "TotalDonated", "AllTimeDiamonds"]);
+        return { uid, name, points: points ?? null, gems: gems ?? null, joined: m.JoinTime, extra: PS99Api.extraNumericFields(raw, CLAN_IGNORE) };
+      });
+    } else {
+      const contrib = new Map((e.PointContributions || []).map((c) => [c.UserID, c]));
+      rows = (e.Members || []).map((m) => {
+        const c = contrib.get(m.UserID);
+        const raw = c ? { ...m, ...c } : m;
+        return { uid: m.UserID, name: m.DisplayName || String(m.UserID), points: c ? c.Points : 0, gems: null, joined: m.JoinTime, extra: PS99Api.extraNumericFields(raw, LEAGUE_IGNORE) };
+      });
+      if (e.Owner?.UserID) {
+        const c = contrib.get(e.Owner.UserID);
+        rows.push({ uid: e.Owner.UserID, name: (e.Owner.DisplayName || String(e.Owner.UserID)) + " (owner)", points: c ? c.Points : 0, gems: null, joined: e.Created, extra: {} });
+      }
+    }
+
+    const sortKey = state.sort.key, dir = state.sort.dir === "asc" ? 1 : -1;
+    rows.sort((a, b) => {
+      const av = sortKey.startsWith("extra:") ? a.extra[sortKey.slice(6)] : a[sortKey];
+      const bv = sortKey.startsWith("extra:") ? b.extra[sortKey.slice(6)] : b[sortKey];
+      if (typeof av === "string" || typeof bv === "string") return dir * String(av ?? "").localeCompare(String(bv ?? ""));
+      return dir * ((av ?? -Infinity) - (bv ?? -Infinity));
+    });
+
+    const needle = state.settings.usernameFilter.trim().toLowerCase();
+    const filtered = needle ? rows.filter((r) => r.name.toLowerCase().includes(needle)) : rows;
+    return { all: rows, filtered };
+  }
+
+  // Hourly-equivalent rate for a row, independent of the Live/Hourly toggle
+  // (used by the roster Δ column *and* the Player Form widget).
+  function rateFor(uid, points, now, forHourly) {
+    const prev = state.prevPoints.get(uid);
+    if (points == null || !prev) return null;
+    const dtH = Math.max(now - prev.ts, 1000) / 3600000;
+    const delta = points - prev.points;
+    return forHourly ? delta / dtH : delta;
+  }
+
+  // ---------- rendering ----------
+  function render() {
+    if (!state.entity) return;
+    renderHero();
+    renderRoster();
+    renderChart();
+    renderGapCards();
+    renderRankUp();
+    requestAnimationFrame(positionTabIndicator);
+  }
+
+  function renderHero() {
+    const e = state.entity, kind = state.kind;
+    if (e.Icon) {
+      const url = PS99Api.iconUrl(e.Icon);
+      el.heroIconFallback.hidden = true;
+      el.heroIcon.hidden = false;
+      el.heroIcon.classList.add("skeleton");
+      el.heroIcon.onload = () => el.heroIcon.classList.remove("skeleton");
+      el.heroIcon.onerror = () => { el.heroIcon.hidden = true; el.heroIconFallback.hidden = false; el.heroIconFallback.textContent = (e.Name || "?").slice(0, 2).toUpperCase(); };
+      el.heroIcon.src = url; el.heroIcon.alt = e.Name || "";
+    } else {
+      el.heroIcon.hidden = true;
+      el.heroIconFallback.hidden = false;
+      el.heroIconFallback.textContent = (e.Name || "?").slice(0, 2).toUpperCase();
+    }
+
+    el.heroName.textContent = e.Name || state.name;
+    if (state.rank) {
+      el.rankBadge.hidden = false;
+      el.rankBadge.textContent = `#${state.rank.toLocaleString()} of ${(state.rankTotal || 0).toLocaleString()}`;
+      el.rankBadge.title = state.rankSource === "tracked" ? "From the tracked leaderboard snapshot" : "Live lookup";
+    } else {
+      el.rankBadge.hidden = true;
+    }
+
+    const meta = [];
+    if (state.settings.colCreated) meta.push(`<span>Since ${fmtDate(e.Created)}</span>`);
+    if (state.settings.colCountry && e.CountryCode) meta.push(`<span>${flagEmoji(e.CountryCode)} ${e.CountryCode}</span>`);
+    if (kind === "clan") meta.push(`<span>${(e.Members || []).length}/${e.MemberCapacity || "?"} members</span>`);
+    else meta.push(`<span>Level ${e.Level ?? "?"}</span>`, `<span>${(e.Members || []).length} members</span>`);
+    el.heroMeta.innerHTML = meta.join("");
+
+    const rows = buildRowData().filtered.slice(0, state.settings.memberCount);
+    const stats = [];
+    if (e.Points != null) stats.push(statChip(fmtNum(e.Points), "Total points"));
+    if (kind === "clan" && e.DepositedDiamonds != null) stats.push(statChip("💎 " + fmtNum(e.DepositedDiamonds), "Clan gems"));
+    if (state.settings.showAverages && rows.length) {
+      const pts = rows.map((r) => r.points).filter((v) => v != null);
+      const gems = rows.map((r) => r.gems).filter((v) => v != null);
+      if (pts.length) stats.push(statChip(fmtNum(pts.reduce((a, b) => a + b, 0) / pts.length), "Avg pts/member"));
+      if (gems.length) stats.push(statChip("💎 " + fmtNum(gems.reduce((a, b) => a + b, 0) / gems.length), "Avg gems/member"));
+    }
+    el.heroStats.innerHTML = stats.join("");
+  }
+  function statChip(v, l) { return `<div class="hero-stat"><span class="v">${v}</span><span class="l">${l}</span></div>`; }
+
+  const BASE_COLUMNS = [
+    { key: "rank", label: "#" },
+    { key: "name", label: "Name" },
+    { key: "points", label: "Points", setting: "colPoints" },
+    { key: "rate", label: "Δ" },
+    { key: "gems", label: "💎", setting: "colGems", clanOnly: true },
+    { key: "joined", label: "Joined", setting: "colJoined" },
+  ];
+
+  function renderRoster() {
+    const kind = state.kind;
+    const { filtered } = buildRowData();
+    const shown = filtered.slice(0, state.settings.memberCount);
+
+    const extraKeySet = new Set();
+    shown.forEach((r) => Object.keys(r.extra).forEach((k) => extraKeySet.add(k)));
+    const extraCols = [...extraKeySet].slice(0, 3).map((k) => ({ key: `extra:${k}`, label: PS99Api.prettyKey(k) }));
+
+    const cols = [...BASE_COLUMNS.filter((c) => (!c.setting || state.settings[c.setting]) && (!c.clanOnly || kind === "clan")), ...extraCols];
+
+    el.rosterHead.innerHTML = cols.map((c) => {
+      const label = c.key === "rate" ? (state.settings.viewMode === "hourly" ? "≈/hr" : "Δ") : c.label;
+      const sorted = state.sort.key === c.key ? `sorted ${state.sort.dir}` : "";
+      return `<th data-key="${c.key}" class="${sorted}">${label}</th>`;
+    }).join("");
+    [...el.rosterHead.children].forEach((th) => {
+      th.addEventListener("click", () => {
+        const key = th.dataset.key;
+        if (state.sort.key === key) state.sort.dir = state.sort.dir === "asc" ? "desc" : "asc";
+        else { state.sort.key = key; state.sort.dir = "desc"; }
+        renderRoster();
+      });
+    });
+
+    const now = Date.now();
+    const newPrev = new Map();
+
+    el.rosterBody.innerHTML = shown.map((r, i) => {
+      const delta = rateFor(r.uid, r.points, now, state.settings.viewMode === "hourly");
+      if (r.points != null) newPrev.set(r.uid, { ts: now, points: r.points });
+      let rateTxt = "-", rateClass = "muted-cell";
+      if (delta != null) { rateTxt = delta ? fmtNum(delta) : "0"; rateClass = delta > 0 ? "pts-up" : delta < 0 ? "pts-down" : "muted-cell"; }
+
+      const cells = cols.map((c) => {
+        if (c.key === "rank") return `<td>${i + 1}</td>`;
+        if (c.key === "name") return `<td class="name-cell">${escapeHtml(r.name)}</td>`;
+        if (c.key === "points") return `<td>${fmtNum(r.points)}</td>`;
+        if (c.key === "rate") return `<td class="${rateClass}">${rateTxt}</td>`;
+        if (c.key === "gems") return `<td>${r.gems != null ? fmtNum(r.gems) : "-"}</td>`;
+        if (c.key === "joined") return `<td>${fmtDate(r.joined)}</td>`;
+        if (c.key.startsWith("extra:")) { const v = r.extra[c.key.slice(6)]; return `<td>${v != null ? fmtNum(v) : "-"}</td>`; }
+        return "<td>-</td>";
+      }).join("");
+      return `<tr>${cells}</tr>`;
+    }).join("");
+
+    state.prevPoints = newPrev;
+    el.rosterCount.textContent = `${shown.length} of ${filtered.length} shown`;
+
+    renderPlayerForm(shown, now);
+  }
+
+  async function renderPlayerForm(rows, now) {
+    const ranked = rows
+      .map((r) => ({ ...r, hourly: rateFor(r.uid, r.points, now, true) }))
+      .filter((r) => r.hourly != null && r.hourly > 0)
+      .sort((a, b) => b.hourly - a.hourly)
+      .slice(0, 3);
+
+    if (!ranked.length) {
+      el.formRow.innerHTML = `<div class="form-empty">Collecting data — best gainers show up after a couple of refreshes.</div>`;
+      return;
+    }
+    const avatars = await PS99Api.getAvatarHeadshots(ranked.map((r) => r.uid));
+    el.formRow.innerHTML = ranked.map((r) => {
+      const av = avatars.get(r.uid);
+      const img = av
+        ? `<img class="form-avatar" src="${av}" alt="" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'form-avatar-fallback',textContent:'${escapeHtml(r.name).slice(0, 2).toUpperCase()}'}))">`
+        : `<div class="form-avatar-fallback">${escapeHtml(r.name).slice(0, 2).toUpperCase()}</div>`;
+      return `<div class="form-card">${img}<div><div class="form-name">${escapeHtml(r.name)}</div><div class="form-gain">+${fmtNum(r.hourly)} · 1h</div></div></div>`;
+    }).join("");
+  }
+
+  async function renderChart() {
+    const kind = state.kind, name = state.entity.Name || state.name;
+    if (state.entity.Points != null) PS99History.pushSessionPoint(kind, name, state.entity.Points);
+
+    const committed = await PS99History.loadHistory(kind, name);
+    const session = PS99History.getSessionSeries(kind, name);
+    const series = PS99History.mergeSeries(committed?.points, session);
+
+    if (series.length < 2) {
+      el.chartSourceNote.textContent = "collecting live data…";
+      el.chartChips.innerHTML = "";
+      return;
+    }
+    PS99Charts.render(el.pointsChart, series);
+    el.chartSourceNote.textContent = committed ? "last 24h · tracked snapshot + live session" : "live session only (not yet in the tracked top ~150)";
+
+    const stats = PS99History.seriesStats(series);
+    if (stats) {
+      const chip = (v, l) => `<div class="chip"><span class="v">${v}</span><span class="l">${l}</span></div>`;
+      el.chartChips.innerHTML = [
+        chip(fmtNum(stats.total), "Total"), chip(fmtNum(stats.avgPerHour), "Avg / h"),
+        chip(fmtNum(stats.bestPerHour), "Best / h"), chip(fmtNum(stats.latestPerHour), "Latest / h"),
+      ].join("");
+    }
+  }
+
+  async function renderGapCards() {
+    const kind = state.kind, name = state.entity.Name || state.name, myPoints = state.entity.Points;
+    const cards = [];
+    for (const [neighbor, who] of [[state.neighborAbove, "above"], [state.neighborBelow, "below"]]) {
+      if (!neighbor || myPoints == null) continue;
+      const gap = Math.abs((neighbor.Points ?? 0) - myPoints);
+      const myHist = await PS99History.loadHistory(kind, name);
+      const theirHist = await PS99History.loadHistory(kind, neighbor.Name);
+      const myRate = PS99History.hourlyRateFromSeries(PS99History.mergeSeries(myHist?.points, PS99History.getSessionSeries(kind, name)));
+      const theirRate = theirHist ? PS99History.hourlyRateFromSeries(theirHist.points) : null;
+
+      let trendHtml = "";
+      if (myRate != null && theirRate != null) {
+        const closing = myRate > theirRate;
+        trendHtml = `<div class="gap-trend ${closing ? "closing" : "extending"}">${closing ? "Closing" : "Extending"} · ${fmtNum(Math.abs(myRate - theirRate))}/h</div>`;
+      }
+      const rankLabel = who === "above" ? "#" + (state.rank - 1) : "#" + (state.rank + 1);
+      cards.push(`
+        <div class="gap-card">
+          <div class="gap-card-head">
+            <div><span class="who">Gap to ${rankLabel}</span><br><span class="name">${escapeHtml(neighbor.Name)}</span></div>
+            <span class="gap">${fmtNum(gap)}</span>
+          </div>
+          <div class="gap-stats">
+            <div class="gap-stat"><span class="v">${myRate != null ? fmtNum(myRate) : "-"}</span><span class="l">Your ≈/h</span></div>
+            <div class="gap-stat"><span class="v">${theirRate != null ? fmtNum(theirRate) : "-"}</span><span class="l">Their ≈/h</span></div>
+          </div>
+          ${trendHtml}
+        </div>`);
+    }
+    el.gapCards.innerHTML = cards.length ? cards.join("") : `<div class="gap-empty">No leaderboard neighbors found for this ${kind}.</div>`;
+  }
+
+  async function renderRankUp() {
+    const kind = state.kind, myPoints = state.entity.Points;
+    const board = await getLeaderboard(kind);
+    if (!board || !board.entries?.length || myPoints == null || !state.rank) {
+      el.rankUpGrid.innerHTML = `<div class="form-empty">Only available for the tracked top ~150 ${kind}s.</div>`;
+      return;
+    }
+    const targets = [];
+    if (state.rank > 1) targets.push({ label: "Next position", rank: state.rank - 1 });
+    for (const r of [1, 2, 3, 5, 10, 25, 50, 100]) if (r < state.rank) targets.push({ label: ordinal(r), rank: r });
+
+    el.rankUpGrid.innerHTML = targets.map((t) => {
+      const entry = board.entries[t.rank - 1];
+      if (!entry) return "";
+      const needed = entry.Points - myPoints;
+      const passed = needed <= 0;
+      return `<div class="rankup-cell">
+        <span class="l">${t.label}</span>
+        <span class="v ${passed ? "passed" : ""}">${passed ? "Passed" : fmtNum(needed)}</span>
+        <span class="sub">${fmtNum(entry.Points)} pts</span>
+      </div>`;
+    }).join("") || `<div class="form-empty">Already #1 — nothing left to chase.</div>`;
+  }
+
+  // ---------- current battle tab (defensive: shape isn't publicly documented) ----------
+  function findMedalFields(entity) {
+    return Object.entries(entity || {}).filter(([k, v]) => /medals?$/i.test(k) && typeof v === "number");
+  }
+  function findClanInBattle(battleData, name) {
+    if (!battleData) return null;
+    const nameLower = name.toLowerCase();
+    const candidateArrays = [];
+    if (Array.isArray(battleData)) candidateArrays.push(battleData);
+    for (const key of ["Clans", "Results", "Leaderboard", "Battles", "Data"]) {
+      if (Array.isArray(battleData[key])) candidateArrays.push(battleData[key]);
+    }
+    for (const arr of candidateArrays) {
+      const hit = arr.find((it) => {
+        const n = PS99Api.pick(it, ["ClanName", "Name"]);
+        return n && String(n).toLowerCase() === nameLower;
+      });
+      if (hit) return hit;
+    }
+    if (battleData[name]) return battleData[name];
+    const foundKey = Object.keys(battleData).find((k) => k.toLowerCase() === nameLower);
+    return foundKey ? battleData[foundKey] : null;
+  }
+  function extractContributionPoints(clanBattleEntry) {
+    if (!clanBattleEntry) return [];
+    let list = PS99Api.pick(clanBattleEntry, ["Contribution", "Members", "Players", "Scores"]);
+    if (list && !Array.isArray(list)) list = PS99Api.pick(list, ["Battle", "Points"]);
+    if (!Array.isArray(list)) return [];
+    return list.map((it) => PS99Api.pick(it, ["Points", "Score", "Amount"])).filter((v) => typeof v === "number");
+  }
+
+  async function renderBattleTab() {
+    const kind = state.kind, e = state.entity;
+    if (kind !== "clan") {
+      el.battleTitle.textContent = "Current battle";
+      el.battleSub.textContent = "";
+      el.battleBody.innerHTML = `<div class="battle-empty">Battle data is a clan-only feature.</div>`;
+      return;
+    }
+    el.battleBody.innerHTML = `<div class="battle-empty">Loading…</div>`;
+    const battleData = await PS99Api.getActiveClanBattle();
+    const entry = findClanInBattle(battleData, e.Name || state.name);
+    const points = extractContributionPoints(entry);
+    const battleName = PS99Api.pick(battleData, ["Name", "BattleName", "Title"]) || PS99Api.pick(entry, ["Name", "BattleName"]) || "Current battle";
+    el.battleTitle.textContent = battleName;
+
+    const medals = findMedalFields(e);
+    const parts = [];
+    if (points.length) {
+      const avg = points.reduce((a, b) => a + b, 0) / points.length;
+      const max = Math.max(...points), min = Math.min(...points);
+      el.battleSub.textContent = `${points.length} members with battle points`;
+      parts.push(`<div class="battle-stat-row">
+        ${statChip(fmtNum(avg), "Average points")}
+        ${statChip(fmtNum(max), "Highest points")}
+        ${statChip(fmtNum(min), "Lowest points")}
+      </div>`);
+    } else {
+      el.battleSub.textContent = "";
+      parts.push(`<div class="battle-empty">No active-battle contribution data found for this clan right now.</div>`);
+    }
+    if (medals.length) {
+      const total = medals.reduce((a, [, v]) => a + v, 0);
+      parts.push(`<div><strong>Battle medals</strong> · total ${total}</div><div class="medal-row">${medals.map(([k, v]) => `<span class="medal-pill">${PS99Api.prettyKey(k.replace(/Medals?$/i, ""))}: ${v}</span>`).join("")}</div>`);
+    }
+    el.battleBody.innerHTML = parts.join("");
+  }
+
+  // ---------- init ----------
+  function init() {
+    wireSettings();
+    wireSearch();
+    showBrowse("clan");
+    window.addEventListener("resize", positionTabIndicator);
+  }
+  document.addEventListener("DOMContentLoaded", init);
+})();
+
+</script>
 </body>
 </html>
