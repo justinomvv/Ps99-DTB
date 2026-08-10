@@ -49,6 +49,10 @@
 }
 
 *{ box-sizing: border-box; }
+/* The hidden attribute must always win, even over elements whose class
+   sets an explicit display (e.g. .loading-overlay's display:flex) —
+   without this, toggling .hidden in JS silently does nothing. */
+[hidden]{ display: none !important; }
 html,body{ height:100%; }
 body{
   margin:0;
